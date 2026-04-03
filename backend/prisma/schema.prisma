@@ -1,0 +1,107 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum PlaceType {
+  country
+  state
+  county
+  city
+  township
+  village
+}
+
+model Places {
+  id            String @id @default(uuid())
+  name          String
+  type          PlaceType
+  email         String
+  phoneNumber   String?
+
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Table name
+  @@map("places")
+}
+
+model Document {
+  id          String   @id @default(uuid())
+  url         String   @unique
+  title       String?
+  source      String?  // ex: "chisago_county"
+  hash        String?  // for change detection
+
+  chunks      Chunk[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([source])
+
+  // Table name
+  @@map("documents")
+}
+
+model Chunk {
+  id         String   @id @default(uuid())
+  documentId String
+  chunkIndex Int
+  content    String   @db.Text
+  embedding  Unsupported("vector(768)")
+  heading   String?
+  tokens    Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+
+  // Table name
+  @@map("chunks")
+}
+
+// Chat persistence: one conversation per thread, messages in order
+model Conversation {
+  id        String    @id @default(uuid())
+  source    String    // e.g. "chisago_county" (SourceType)
+  messages  Message[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([source])
+  @@map("conversations")
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  role           String       // "user" | "agent"
+  content        String       @db.Text
+  vote           String?      // "up" | "down" when set
+  model          String?
+  inputTokens    Int?
+  outputTokens   Int?
+  responseTime   Int?
+  
+  createdAt      DateTime     @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@map("messages")
+}
