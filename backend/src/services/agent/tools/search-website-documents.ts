@@ -2,13 +2,11 @@ import { DynamicStructuredTool } from "@langchain/core/tools"
 import { z } from "zod"
 import { EmbeddingService } from "../../embedding.service"
 import { DocumentService } from "../../document.service"
-import { SourceType } from "../../../lib/types/system-prompt.types"
-
 /**
  * Creates the search_website_documents tool, optionally scoped to a document source.
  * When source is provided, only chunks from documents with that source are returned (e2e consistency with chat source).
  */
-export function createSearchWebsiteDocumentsTool(source?: SourceType) {
+export function createSearchWebsiteDocumentsTool(source?: string) {
   return new DynamicStructuredTool({
     name: "search_website_documents",
     description:

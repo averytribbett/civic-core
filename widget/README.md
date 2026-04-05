@@ -12,7 +12,7 @@
 ```
 
 - **apiBaseUrl**: Base URL of the backend (e.g. `http://localhost:4000`). Required for the widget to send messages to the chat API. Omit or use `""` if the widget is served from the same origin as the backend.
-- **source**: Value sent as `source` in POST `/chat` requests. Must match a backend `SourceType` (e.g. `chisago_county_mn`).
+- **source**: Value sent as `source` in POST `/chat` requests. Must match a `jurisdiction.source` row in the database (see backend `prisma/seed.ts` for the default example).
 
 ### Accessibility (WCAG 2.1 AA)
 

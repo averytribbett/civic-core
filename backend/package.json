@@ -4,7 +4,7 @@
   "description": "Backend logic",
   "main": "index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "start": "node dist/index.js",
     "dev": "nodemon",
     "prisma:studio": "npx prisma studio --config ./prisma.config.ts",
@@ -30,7 +30,7 @@
     "@prisma/adapter-pg": "^7.2.0",
     "@prisma/client": "^7.2.0",
     "@types/express": "^5.0.6",
-    "@types/node": "^25.0.6",
+    "@types/node": "^25.5.2",
     "cheerio": "^1.1.2",
     "cors": "^2.8.6",
     "crawlee": "^3.15.3",

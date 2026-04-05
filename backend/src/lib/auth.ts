@@ -1,19 +1,5 @@
 import { Request, Response, NextFunction } from "express"
-import { SourceType, SOURCE_CONFIG } from "./types/system-prompt.types"
-
-/**
- * Get allowed origins for a source from its env var (defined in SOURCE_CONFIG).
- */
-function getAllowedOriginsForSource(source: string): string[] | null {
-  const config = SOURCE_CONFIG[source as SourceType]
-  if (!config) return null
-  const value = process.env[config.originsEnvVar]
-  if (!value || typeof value !== "string") return null
-  return value
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean)
-}
+import { prisma } from "./prisma"
 
 /**
  * Extract origin (protocol + host) from a URL string.
@@ -54,57 +40,82 @@ function originMatchesAllowed(
   return requestOrigin.host === allowedLower
 }
 
+function normalizeAllowedOrigins(origins: string[]): string[] {
+  return origins.map((s) => s.trim().toLowerCase()).filter(Boolean)
+}
+
 /**
  * Validates that the request comes from an allowed origin for the given source.
  * Uses Origin header (preferred for CORS) or Referer header.
- * Allowed origins are read from the env var defined in SOURCE_CONFIG (e.g. CHISAGO_COUNTY_MN_ORIGINS).
+ * Allowed origins are loaded from the Jurisdiction row for `req.body.source`.
  */
-export function requireOrigin(req: Request, res: Response, next: NextFunction): void {
-  const source = req.body?.source
-  if (!source || typeof source !== "string") {
-    res.status(400).json({
-      error: "Invalid request",
-      message: "Source is required",
+export async function requireOrigin(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const source = req.body?.source
+    if (!source || typeof source !== "string") {
+      res.status(400).json({
+        error: "Invalid request",
+        message: "Source is required",
+      })
+      return
+    }
+
+    const jurisdiction = await prisma.jurisdiction.findUnique({
+      where: { source },
     })
-    return
-  }
 
-  const allowed = getAllowedOriginsForSource(source)
-  if (!allowed?.length) {
-    res.status(403).json({
-      error: "Forbidden",
-      message: "Source is not configured for origin validation",
-    })
-    return
-  }
+    if (!jurisdiction) {
+      res.status(403).json({
+        error: "Forbidden",
+        message: "Unknown or inactive source",
+      })
+      return
+    }
 
-  const originHeader = req.headers.origin
-  const refererHeader = req.headers.referer
+    const allowed = normalizeAllowedOrigins(jurisdiction.origins)
+    if (!allowed.length) {
+      res.status(403).json({
+        error: "Forbidden",
+        message: "Source is not configured for origin validation",
+      })
+      return
+    }
 
-  let requestOrigin: { protocol: string; host: string } | null = null
-  if (originHeader && typeof originHeader === "string") {
-    requestOrigin = parseOrigin(originHeader)
-  }
-  if (!requestOrigin && refererHeader && typeof refererHeader === "string") {
-    requestOrigin = parseOrigin(refererHeader)
-  }
+    const originHeader = req.headers.origin
+    const refererHeader = req.headers.referer
 
-  if (!requestOrigin) {
-    res.status(403).json({
-      error: "Forbidden",
-      message: "Request origin could not be verified",
-    })
-    return
-  }
+    let requestOrigin: { protocol: string; host: string } | null = null
+    if (originHeader && typeof originHeader === "string") {
+      requestOrigin = parseOrigin(originHeader)
+    }
+    if (!requestOrigin && refererHeader && typeof refererHeader === "string") {
+      requestOrigin = parseOrigin(refererHeader)
+    }
 
-  const matches = allowed.some((a) => originMatchesAllowed(requestOrigin!, a))
-  if (!matches) {
-    res.status(403).json({
-      error: "Forbidden",
-      message: "Request is not allowed from this origin",
-    })
-    return
-  }
+    if (!requestOrigin) {
+      res.status(403).json({
+        error: "Forbidden",
+        message: "Request origin could not be verified",
+      })
+      return
+    }
 
-  next()
+    const matches = allowed.some((a) => originMatchesAllowed(requestOrigin!, a))
+    if (!matches) {
+      res.status(403).json({
+        error: "Forbidden",
+        message: "Request is not allowed from this origin",
+      })
+      return
+    }
+
+    req.jurisdiction = jurisdiction
+    next()
+  } catch (err) {
+    next(err)
+  }
 }

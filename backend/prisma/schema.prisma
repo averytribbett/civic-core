@@ -13,7 +13,7 @@ datasource db {
   provider = "postgresql"
 }
 
-enum PlaceType {
+enum JurisdictionType {
   country
   state
   county
@@ -22,26 +22,28 @@ enum PlaceType {
   village
 }
 
-model Places {
+model Jurisdiction {
   id            String @id @default(uuid())
+  /// Widget/API source slug (e.g. chisago_county_mn); matches Conversation.source and Document.source
+  source        String            @unique
   name          String
-  type          PlaceType
+  type          JurisdictionType
   email         String
   phoneNumber   String?
-
+  prompt        String            @db.Text
+  origins       String[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Table name
-  @@map("places")
+  @@map("jurisdiction")
 }
 
 model Document {
   id          String   @id @default(uuid())
   url         String   @unique
   title       String?
-  source      String?  // ex: "chisago_county"
+  source      String?  // Jurisdiction.source slug (e.g. chisago_county_mn)
   hash        String?  // for change detection
 
   chunks      Chunk[]
@@ -78,7 +80,7 @@ model Chunk {
 // Chat persistence: one conversation per thread, messages in order
 model Conversation {
   id        String    @id @default(uuid())
-  source    String    // e.g. "chisago_county" (SourceType)
+  source    String    // Jurisdiction.source slug (e.g. chisago_county_mn)
   messages  Message[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt

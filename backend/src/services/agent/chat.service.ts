@@ -11,10 +11,6 @@ import {
   ToolMessage,
 } from "@langchain/core/messages"
 import { StructuredToolInterface } from "@langchain/core/tools"
-import {
-  SourceType,
-  getSystemPrompt,
-} from "../../lib/types/system-prompt.types"
 import { LLMProvider, ChatState } from "../../lib/types/chat.types"
 import { createSearchWebsiteDocumentsTool } from "./tools/search-website-documents"
 
@@ -25,7 +21,8 @@ export class ChatService {
   private llm: Pick<BaseChatModel, "invoke">
   private provider: LLMProvider
   private model?: string
-  private readonly source: SourceType
+  private readonly source: string
+  private readonly systemPrompt: string
   private searchTool: StructuredToolInterface
 
   private parseHistory(raw: unknown): BaseMessage[] {
@@ -60,8 +57,9 @@ export class ChatService {
     return out
   }
 
-  constructor(source: SourceType) {
+  constructor(source: string, systemPrompt: string) {
     this.source = source
+    this.systemPrompt = systemPrompt
     this.provider = (process.env.LLM_PROVIDER as LLMProvider) || "openai"
     this.model = process.env.LLM_MODEL
     this.searchTool = createSearchWebsiteDocumentsTool(source)
@@ -268,11 +266,8 @@ export class ChatService {
       const messages: BaseMessage[] = this.parseHistory(rawHistory)
       messages.push(new HumanMessage(message))
 
-      // System prompt with current date for this request
-      const systemPrompt = getSystemPrompt(this.source, { date: new Date() })
-
       // Create and run the graph (recursion limit to prevent runaway tool loops)
-      const graph = this.createChatGraph(systemPrompt)
+      const graph = this.createChatGraph(this.systemPrompt)
       const result = await graph.invoke(
         { messages },
         { recursionLimit: 10 },

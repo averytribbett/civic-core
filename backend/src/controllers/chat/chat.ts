@@ -1,6 +1,6 @@
 import { Request, Response } from "express"
 import { ChatService } from "../../services/agent/chat.service"
-import { SourceType } from "../../lib/types/system-prompt.types"
+import { renderSystemPrompt } from "../../lib/system-prompt"
 import { prisma } from "../../lib/prisma"
 import { encrypt } from "../../lib/encryption"
 
@@ -14,6 +14,14 @@ export const chat = async (req: Request, res: Response) => {
       history: rawHistory,
       conversationId: existingConversationId,
     } = req.body
+
+    const jurisdiction = req.jurisdiction
+    if (!jurisdiction || jurisdiction.source !== source) {
+      return res.status(403).json({
+        error: "Access denied",
+        message: "You are not authorized to access this resource",
+      })
+    }
 
     // Validate message
     if (!message || typeof message !== "string") {
@@ -30,18 +38,17 @@ export const chat = async (req: Request, res: Response) => {
       })
     }
 
-    if (
-      !source ||
-      typeof source !== "string" ||
-      !Object.values(SourceType).includes(source as SourceType)
-    ) {
+    if (!source || typeof source !== "string") {
       return res.status(400).json({
         error: "Access denied",
         message: "You are not authorized to access this resource",
       })
     }
 
-    const chatService = new ChatService(source as SourceType)
+    const systemPrompt = renderSystemPrompt(jurisdiction.prompt, {
+      date: new Date(),
+    })
+    const chatService = new ChatService(source, systemPrompt)
     const startTime = Date.now()
     const { response, model, inputTokens, outputTokens } =
       await chatService.chat(message, rawHistory)

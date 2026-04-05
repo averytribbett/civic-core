@@ -1,6 +1,5 @@
 import { Request, Response } from "express"
 import { prisma } from "../../lib/prisma"
-import { SourceType } from "../../lib/types/system-prompt.types"
 
 const VALID_VOTES = ["up", "down"] as const
 
@@ -15,6 +14,13 @@ export const voteMessage = async (req: Request, res: Response) => {
           : ""
     const { vote, source } = req.body
 
+    if (!req.jurisdiction || req.jurisdiction.source !== source) {
+      return res.status(403).json({
+        error: "Access denied",
+        message: "You are not authorized to access this resource",
+      })
+    }
+
     if (!messageId) {
       return res.status(400).json({
         error: "Invalid request",
@@ -22,11 +28,7 @@ export const voteMessage = async (req: Request, res: Response) => {
       })
     }
 
-    if (
-      !source ||
-      typeof source !== "string" ||
-      !Object.values(SourceType).includes(source as SourceType)
-    ) {
+    if (!source || typeof source !== "string") {
       return res.status(400).json({
         error: "Access denied",
         message: "You are not authorized to access this resource",
