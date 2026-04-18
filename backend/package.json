@@ -5,12 +5,18 @@
   "main": "index.js",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "start": "node dist/index.js",
+    "start": "node dist/src/index.js",
+    "start:release": "npx prisma migrate deploy && node dist/src/index.js",
     "dev": "nodemon",
+    "db:migrate": "npx prisma migrate dev",
+    "db:migrate:deploy": "npx prisma migrate deploy",
+    "db:generate": "npx prisma generate",
     "prisma:studio": "npx prisma studio --config ./prisma.config.ts",
     "prisma:migrate": "npx prisma migrate dev",
     "prisma:generate": "npx prisma generate",
     "prisma:migrate:production": "npx prisma migrate deploy",
+    "docker:build": "docker build --platform linux/amd64 -t civic-core-backend:local .",
+    "docker:run": "docker run --rm -p 4000:8080 -e PORT=8080 --env-file .env civic-core-backend:local",
     "lint:fix": "eslint src prisma.config.ts --fix",
     "format": "prettier --write \"src/**/*.ts\" \"prisma.config.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"prisma.config.ts\"",
@@ -21,7 +27,6 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@huggingface/transformers": "^3.8.1",
     "@langchain/anthropic": "^1.3.12",
     "@langchain/core": "^1.1.29",
     "@langchain/google-genai": "^2.1.21",
@@ -45,12 +50,12 @@
     "prisma": "^7.2.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "dotenv": "^17.2.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.16.0",
     "@types/cors": "^2.8.19",
-    "dotenv": "^17.2.3",
     "eslint": "^9.16.0",
     "eslint-config-prettier": "^9.1.0",
     "nodemon": "^3.1.11",

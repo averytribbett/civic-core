@@ -5,8 +5,24 @@ import helmet from "helmet"
 import rateLimit from "express-rate-limit"
 import { indexRouter } from "./routes"
 
+function listenPort(): number {
+  const raw = process.env.PORT
+  if (raw === undefined || raw === "") {
+    return 4000
+  }
+  const n = Number.parseInt(raw, 10)
+  if (!Number.isFinite(n) || n <= 0 || n > 65535) {
+    console.error(`[listen] Invalid PORT=${JSON.stringify(raw)}, using 4000`)
+    return 4000
+  }
+  return n
+}
+
 const app: Express = express()
-const port = 4000
+const port = listenPort()
+
+// Cloud Run (and other proxies) set X-Forwarded-*; required for express-rate-limit and correct req.ip.
+app.set("trust proxy", 1)
 
 app.get("/", (req: Request, res: Response) => {
   res.send("Express + TypeScript Server")
@@ -38,6 +54,9 @@ app.use("/chat", chatLimiter)
 
 app.use("/", indexRouter)
 
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`)
+const host = "0.0.0.0"
+app.listen(port, host, () => {
+  console.log(
+    `[listen] Server is listening on http://${host}:${port} (PORT env=${JSON.stringify(process.env.PORT)})`,
+  )
 })
