@@ -1,5 +1,12 @@
 # React + TypeScript + Vite
 
+## Production (Firebase Hosting)
+
+1. [Firebase CLI](https://firebase.google.com/docs/cli): `firebase login`
+2. From this directory: copy `.firebaserc.example` to `.firebaserc` and set your project id (or run `firebase use --add`).
+3. Build and deploy: `yarn deploy:hosting` (runs `yarn build` then `firebase deploy --only hosting`). Hosting serves the Vite output directory `dist/` per `firebase.json`.
+4. Custom domain: Firebase console → Hosting → add domain; add the TXT/A/CNAME records at your DNS provider (e.g. Namecheap).
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

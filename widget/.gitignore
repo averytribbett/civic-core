@@ -1,0 +1,11 @@
+hosting/public/
+
+# Firebase
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+
+# Firebase agent skill packs (local tooling; not app source)
+.agents/
+.claude/
+skills-lock.json

@@ -1,0 +1,11 @@
+{
+  "name": "civic-core-widget",
+  "private": true,
+  "description": "Static embed + hosting layout for Firebase Hosting or GCS",
+  "scripts": {
+    "prepare-hosting": "node scripts/prepare-hosting.mjs",
+    "verify:hosting": "node scripts/verify-hosting.mjs",
+    "deploy:hosting": "npm run prepare-hosting && npm run verify:hosting && firebase deploy --only hosting",
+    "deploy:firebase": "npm run deploy:hosting"
+  }
+}
