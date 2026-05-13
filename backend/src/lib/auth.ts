@@ -2,52 +2,47 @@ import { Request, Response, NextFunction } from "express"
 import { prisma } from "./prisma"
 
 /**
- * Extract origin (protocol + host) from a URL string.
+ * Canonical browser origin (scheme + host + port) for CORS-style comparison.
  */
-function parseOrigin(urlOrOrigin: string): { protocol: string; host: string } | null {
+function canonicalOriginFromUrlString(urlOrOrigin: string): string | null {
   try {
-    const u = new URL(urlOrOrigin)
-    return { protocol: u.protocol, host: u.hostname }
+    return new URL(urlOrOrigin.trim()).origin.toLowerCase()
   } catch {
     return null
   }
 }
 
 /**
- * Check if request origin matches one of the allowed patterns.
- * Allowed patterns: exact origin (https://example.com) or host pattern (*.example.com).
+ * Origins allowed to call `/chat` (widget shell hosts). Set `WIDGET_ALLOWED_ORIGINS`
+ * to a comma-separated list, e.g. `https://civic-core-widget.web.app,https://app.civiccore.ai`
  */
-function originMatchesAllowed(
-  requestOrigin: { protocol: string; host: string },
-  allowed: string,
-): boolean {
-  const allowedLower = allowed.toLowerCase()
-  if (allowedLower.startsWith("http://") || allowedLower.startsWith("https://")) {
-    const parsed = parseOrigin(allowed)
-    if (!parsed) return false
-    return (
-      requestOrigin.protocol === parsed.protocol &&
-      requestOrigin.host === parsed.host
-    )
+function getWidgetAllowedOrigins(): string[] {
+  const raw = process.env.WIDGET_ALLOWED_ORIGINS
+  if (!raw?.trim()) return []
+  const out: string[] = []
+  for (const part of raw.split(",")) {
+    const c = canonicalOriginFromUrlString(part)
+    if (c) out.push(c)
   }
-  if (allowedLower.startsWith("*.")) {
-    const domain = allowedLower.slice(2)
-    return (
-      requestOrigin.host === domain ||
-      requestOrigin.host.endsWith("." + domain)
-    )
-  }
-  return requestOrigin.host === allowedLower
+  return out
 }
 
-function normalizeAllowedOrigins(origins: string[]): string[] {
-  return origins.map((s) => s.trim().toLowerCase()).filter(Boolean)
+function requestCanonicalOrigin(req: Request): string | null {
+  const originHeader = req.headers.origin
+  if (originHeader && typeof originHeader === "string") {
+    const c = canonicalOriginFromUrlString(originHeader)
+    if (c) return c
+  }
+  const refererHeader = req.headers.referer
+  if (refererHeader && typeof refererHeader === "string") {
+    return canonicalOriginFromUrlString(refererHeader)
+  }
+  return null
 }
 
 /**
- * Validates that the request comes from an allowed origin for the given source.
- * Uses Origin header (preferred for CORS) or Referer header.
- * Allowed origins are loaded from the Jurisdiction row for `req.body.source`.
+ * Validates `Origin` / `Referer` against `WIDGET_ALLOWED_ORIGINS`, then loads
+ * `Jurisdiction` by `req.body.source` and attaches `req.jurisdiction`.
  */
 export async function requireOrigin(
   req: Request,
@@ -64,38 +59,16 @@ export async function requireOrigin(
       return
     }
 
-    const jurisdiction = await prisma.jurisdiction.findUnique({
-      where: { source },
-    })
-
-    if (!jurisdiction) {
-      res.status(403).json({
-        error: "Forbidden",
-        message: "Unknown or inactive source",
+    const widgetOrigins = getWidgetAllowedOrigins()
+    if (!widgetOrigins.length) {
+      res.status(503).json({
+        error: "Service misconfigured",
+        message: "WIDGET_ALLOWED_ORIGINS is not set or empty",
       })
       return
     }
 
-    const allowed = normalizeAllowedOrigins(jurisdiction.origins)
-    if (!allowed.length) {
-      res.status(403).json({
-        error: "Forbidden",
-        message: "Source is not configured for origin validation",
-      })
-      return
-    }
-
-    const originHeader = req.headers.origin
-    const refererHeader = req.headers.referer
-
-    let requestOrigin: { protocol: string; host: string } | null = null
-    if (originHeader && typeof originHeader === "string") {
-      requestOrigin = parseOrigin(originHeader)
-    }
-    if (!requestOrigin && refererHeader && typeof refererHeader === "string") {
-      requestOrigin = parseOrigin(refererHeader)
-    }
-
+    const requestOrigin = requestCanonicalOrigin(req)
     if (!requestOrigin) {
       res.status(403).json({
         error: "Forbidden",
@@ -104,11 +77,22 @@ export async function requireOrigin(
       return
     }
 
-    const matches = allowed.some((a) => originMatchesAllowed(requestOrigin!, a))
-    if (!matches) {
+    if (!widgetOrigins.includes(requestOrigin)) {
       res.status(403).json({
         error: "Forbidden",
         message: "Request is not allowed from this origin",
+      })
+      return
+    }
+
+    const jurisdiction = await prisma.jurisdiction.findUnique({
+      where: { source },
+    })
+
+    if (!jurisdiction) {
+      res.status(403).json({
+        error: "Forbidden",
+        message: "Unknown or inactive source",
       })
       return
     }

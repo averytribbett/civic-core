@@ -69,13 +69,17 @@ Replace placeholders with your deployed widget origin, Cloud Run API URL, and ju
 
 If you use **split** domains (launcher on `cdn.example.com`, shell on `app.example.com`), set `widgetUrl` to the **app** host’s `widget.html` URL; `script src` stays on the CDN host.
 
-## Backend: CORS and `origins` (required)
+## Backend: chat origin (required)
 
-1. **Express `CORS_ALLOWED_ORIGINS`** (Cloud Run): If you set it, include the **origin of `widget.html`** (scheme + host, no path), e.g. `https://your-widget-project-id.web.app` or your widget custom domain. That is the browser `Origin` for `fetch` from inside the iframe, not the parent `.gov` site. See [`backend/cloud-run.env.yaml.example`](../backend/cloud-run.env.yaml.example).
+Set **`WIDGET_ALLOWED_ORIGINS`** on the API (comma-separated origins where `widget.html` is served). That is the browser **`Origin`** for `fetch` from inside the iframe, not the parent marketing site. See [`backend/cloud-run.env.yaml.example`](../backend/cloud-run.env.yaml.example) and [`backend/README.md`](../backend/README.md).
 
-2. **`jurisdiction.origins` in Postgres**: `POST /chat` validates the request origin against this array for the row matching `body.source`. Add the same **widget shell** origin(s) your clients use. Example SQL: [`backend/scripts/jurisdiction-add-widget-shell-origin.example.sql`](../backend/scripts/jurisdiction-add-widget-shell-origin.example.sql).
+Express uses permissive **`cors()`** (no origin allowlist at the middleware layer); **`requireOrigin`** enforces the widget list for `POST /chat` and vote routes.
 
-3. **Terms link**: [`app/widget.html`](app/widget.html) links to `/terms` on the widget host. Host a small terms page there or change the link later to a full URL.
+`Jurisdiction.origins` in Postgres is **not** used for chat auth anymore (you can leave the column for other use or clear it).
+
+### Terms link
+
+[`app/widget.html`](app/widget.html) links to `/terms` on the widget host. Host a small terms page there or change the link later to a full URL.
 
 ### Accessibility (WCAG 2.1 AA)
 

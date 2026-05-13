@@ -2,9 +2,19 @@
   if (window.__CIVICCORE__) return;
   window.__CIVICCORE__ = true;
 
-  const config = window.CivicCoreWidget || {};
-  if (!config.source) return;
+  const launcherScriptEl = document.currentScript;
+  const launcherOrigin =
+    launcherScriptEl && launcherScriptEl.src
+      ? new URL(launcherScriptEl.src, document.baseURI || undefined).origin
+      : "";
 
+  const userCfg = window.CivicCoreWidget || {};
+  if (!userCfg.source) return;
+
+  const DEFAULT_API_BASE = "https://civic-core-api-672197054224.us-central1.run.app";
+  const config = { apiBaseUrl: DEFAULT_API_BASE, ...userCfg };
+
+  function startWidget() {
   const align = (config.align === "left" ? "left" : "right");
   const supportedLangs = ["en","es","fr","de","zh","ja","pt","ar","ko"];
   const browserLang = (navigator.language || "en").split("-")[0];
@@ -230,9 +240,27 @@
     }
   });
 
-  // Chat iframe (widgetUrl for local/dev; otherwise production URL)
+  // Chat iframe: absolute https base (e.g. https://PROJECT.web.app/) → /app/widget.html on that host
+  function resolveChatShellUrl(raw) {
+    const fallback = "https://app.civiccore.ai/app/widget.html";
+    if (!raw || !String(raw).trim()) return fallback;
+    const u = String(raw).trim();
+    if (!/^https?:\/\//i.test(u)) return u;
+    try {
+      const parsed = new URL(u);
+      const lastSeg = parsed.pathname.split("/").filter(Boolean).pop() || "";
+      if (/\.html?$/i.test(lastSeg)) return u;
+      return new URL("app/widget.html", parsed.origin + "/").toString();
+    } catch (_) {
+      return u;
+    }
+  }
+
   const iframe = document.createElement("iframe");
-  iframe.src = config.widgetUrl || "https://app.civiccore.com/widget.html";
+  const shellFromLauncher =
+    launcherOrigin && new URL("app/widget.html", launcherOrigin + "/").toString();
+  const shellRaw = (config.widgetUrl && String(config.widgetUrl).trim()) || shellFromLauncher || "";
+  iframe.src = shellRaw ? resolveChatShellUrl(shellRaw) : "https://app.civiccore.ai/app/widget.html";
   iframe.setAttribute("title", loc.openChat);
 
   const iframeTransition = "opacity 0.22s ease-out, transform 0.22s ease-out";
@@ -333,4 +361,19 @@
       "*"
     );
   };
+  }
+
+  function runWhenBodyReady() {
+    if (document.body) {
+      startWidget();
+      return;
+    }
+    requestAnimationFrame(runWhenBodyReady);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", runWhenBodyReady);
+  } else {
+    runWhenBodyReady();
+  }
 })();

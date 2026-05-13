@@ -53,12 +53,14 @@ Set these in `.env` locally, or in the Cloud Run service (or Secret Manager) for
 | `OPENAI_API_KEY` | Yes (embeddings; chat if OpenAI) | OpenAI API key |
 | `ANTHROPIC_API_KEY` | If using Anthropic | Anthropic API key |
 | `GOOGLE_API_KEY` | If using Google | Google GenAI API key |
-| `CORS_ALLOWED_ORIGINS` | No | Comma-separated allowed browser origins for Express CORS. If the embeddable widget is used, include the **HTTPS origin where `widget.html` is hosted** (iframe `fetch` origin), not only client municipal sites. Omit to allow all origins. |
+| `WIDGET_ALLOWED_ORIGINS` | **Yes** (for `/chat`) | Comma-separated **origins** where `widget.html` is hosted (iframe `fetch` uses this origin). Example: `https://civic-core-widget.web.app,https://app.civiccore.ai`. For Live Server, add `http://127.0.0.1:5500`. If unset or empty, chat returns **503**. |
 | `MESSAGE_ENCRYPTION_KEY` | No | Optional message encryption |
 | `DISABLE_CRAWL` | No | Set to **`true`** on Cloud Run to turn off **`/crawl`** and never load **crawlee** (crawler only runs locally). |
 | `SKIP_DB_MIGRATE` | No | Set to **`true`** to skip `prisma migrate deploy` in the container (run **`yarn db:migrate:deploy`** yourself when schema changes). |
 
 Provider-specific API keys must match `LLM_PROVIDER`.
+
+**CORS:** the app uses `cors()` with default options (reflective / permissive for browser preflight). Chat access is gated by **`WIDGET_ALLOWED_ORIGINS`** in [`src/lib/auth.ts`](src/lib/auth.ts), not by `jurisdiction.origins`.
 
 ---
 

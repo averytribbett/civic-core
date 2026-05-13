@@ -13,5 +13,14 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      window.CivicCoreWidget = {
+        source: "chisago_county_mn",
+        name: "Chisago county",
+        logo: "https://www.chisagocountymn.gov/ImageRepository/Document?documentID=22423",
+        theme: { color: "#2563eb" },
+      };
+    </script>
+    <script src="https://app.civiccore.ai/widget.js"></script>
   </body>
 </html>

@@ -31,6 +31,7 @@ model Jurisdiction {
   email         String
   phoneNumber   String?
   prompt        String            @db.Text
+  /// Not used for `/chat` origin checks (see `WIDGET_ALLOWED_ORIGINS` on the API).
   origins       String[]
 
   createdAt DateTime @default(now())

@@ -30,16 +30,7 @@ app.get("/", (req: Request, res: Response) => {
 
 app.use(helmet())
 
-const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS
-  ? process.env.CORS_ALLOWED_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean)
-  : null
-app.use(
-  cors(
-    allowedOrigins?.length
-      ? { origin: allowedOrigins }
-      : undefined,
-  ),
-)
+app.use(cors())
 
 app.use(express.json())
 
