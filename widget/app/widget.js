@@ -301,6 +301,7 @@ async function sendToBackend(message) {
       source: config.source,
       history: getHistoryForRequest(),
       conversationId: conversationId || undefined,
+      language: i18n.locale,
     }),
   });
   if (!res.ok) {

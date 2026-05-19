@@ -8,7 +8,7 @@ Use a **dedicated Firebase project** for the widget (separate from the marketing
 2. Create a Firebase project (or pick an existing one used only for the widget).
 3. From `widget/`: `cp .firebaserc.example .firebaserc` and set `YOUR_FIREBASE_PROJECT_ID` to that project’s id.
 4. **Custom domain** (optional, e.g. `app.civiccore.ai`): Firebase Console → **Build → Hosting** → connect domain; add the DNS records your registrar shows (same idea as any static site).
-5. Deploy: `npm run deploy:hosting` (runs `prepare-hosting`, `verify:hosting`, then `firebase deploy --only hosting`).
+5. Deploy: `yarn deploy:hosting` (runs `prepare-hosting`, `verify:hosting`, then `firebase deploy --only hosting`).
 
 After deploy, the shell is at:
 
@@ -18,7 +18,7 @@ After deploy, the shell is at:
 
 ### Not using Firebase?
 
-You can still ship the same files: run `npm run prepare-hosting`, then upload everything under `hosting/public/` to any HTTPS static host. For Google Cloud Storage + bucket hosting, see [`scripts/deploy-gcs.example.sh`](scripts/deploy-gcs.example.sh). Do not set `X-Frame-Options` / CSP in a way that blocks embedding `widget.html` on client sites.
+You can still ship the same files: run `yarn prepare-hosting`, then upload everything under `hosting/public/` to any HTTPS static host. For Google Cloud Storage + bucket hosting, see [`scripts/deploy-gcs.example.sh`](scripts/deploy-gcs.example.sh). Do not set `X-Frame-Options` / CSP in a way that blocks embedding `widget.html` on client sites.
 
 ## Local development
 
@@ -74,8 +74,6 @@ If you use **split** domains (launcher on `cdn.example.com`, shell on `app.examp
 Set **`WIDGET_ALLOWED_ORIGINS`** on the API (comma-separated origins where `widget.html` is served). That is the browser **`Origin`** for `fetch` from inside the iframe, not the parent marketing site. See [`backend/cloud-run.env.yaml.example`](../backend/cloud-run.env.yaml.example) and [`backend/README.md`](../backend/README.md).
 
 Express uses permissive **`cors()`** (no origin allowlist at the middleware layer); **`requireOrigin`** enforces the widget list for `POST /chat` and vote routes.
-
-`Jurisdiction.origins` in Postgres is **not** used for chat auth anymore (you can leave the column for other use or clear it).
 
 ### Terms link
 

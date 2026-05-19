@@ -20,7 +20,7 @@ for (const rel of required) {
   try {
     await fs.access(p)
   } catch {
-    console.error(`[verify-hosting] Missing: ${rel} (run npm run prepare-hosting first)`)
+    console.error(`[verify-hosting] Missing: ${rel} (run yarn prepare-hosting first)`)
     ok = false
   }
 }

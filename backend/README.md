@@ -60,7 +60,7 @@ Set these in `.env` locally, or in the Cloud Run service (or Secret Manager) for
 
 Provider-specific API keys must match `LLM_PROVIDER`.
 
-**CORS:** the app uses `cors()` with default options (reflective / permissive for browser preflight). Chat access is gated by **`WIDGET_ALLOWED_ORIGINS`** in [`src/lib/auth.ts`](src/lib/auth.ts), not by `jurisdiction.origins`.
+**CORS:** the app uses `cors()` with default options (reflective / permissive for browser preflight). Chat access is gated by **`WIDGET_ALLOWED_ORIGINS`** in [`src/lib/auth.ts`](src/lib/auth.ts).
 
 ---
 

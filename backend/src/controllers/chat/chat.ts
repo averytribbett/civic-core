@@ -13,6 +13,7 @@ export const chat = async (req: Request, res: Response) => {
       source,
       history: rawHistory,
       conversationId: existingConversationId,
+      language: rawLanguage,
     } = req.body
 
     const jurisdiction = req.jurisdiction
@@ -72,11 +73,21 @@ export const chat = async (req: Request, res: Response) => {
       conversationId = created.id
     }
 
+    const language =
+      typeof rawLanguage === "string" && rawLanguage.trim()
+        ? rawLanguage.trim().slice(0, 16)
+        : undefined
+
     const userContentToStore = encrypt(message)
     const agentContentToStore = encrypt(response)
 
     await prisma.message.create({
-      data: { conversationId, role: "user", content: userContentToStore },
+      data: {
+        conversationId,
+        role: "user",
+        content: userContentToStore,
+        language,
+      },
     })
     const agentMsg = await prisma.message.create({
       data: {

@@ -31,8 +31,6 @@ model Jurisdiction {
   email         String
   phoneNumber   String?
   prompt        String            @db.Text
-  /// Not used for `/chat` origin checks (see `WIDGET_ALLOWED_ORIGINS` on the API).
-  origins       String[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -95,6 +93,8 @@ model Message {
   conversationId String
   role           String       // "user" | "agent"
   content        String       @db.Text
+  /// UI locale when the user sent the message (e.g. en, es)
+  language       String?
   vote           String?      // "up" | "down" when set
   model          String?
   inputTokens    Int?
