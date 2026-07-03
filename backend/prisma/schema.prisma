@@ -31,10 +31,18 @@ model Jurisdiction {
   email         String
   phoneNumber   String?
   prompt        String            @db.Text
+  /// When true, included in the weekly Cloud Run crawl-sync job
+  enabled       Boolean           @default(false)
+  /// Seed URL for crawls (e.g. https://www.chisagocountymn.gov/)
+  crawlUrl      String?
+  lastCrawlAt   DateTime?
+  lastCrawlStatus String?
+  lastCrawlError  String?         @db.Text
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([enabled])
   @@map("jurisdiction")
 }
 

@@ -6,3 +6,6 @@ secrets/
 /src/generated/prisma
 
 dist/
+
+# Crawlee local storage (request queues, key-value stores, datasets)
+storage/

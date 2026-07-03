@@ -2,11 +2,28 @@ import { PrismaClient } from "../generated/prisma/client"
 import { IngestChunk } from "../lib/types/document.types"
 import pgvector from "pgvector"
 import { randomUUID } from "node:crypto"
+import { mapPool } from "../lib/concurrency"
 import { prisma } from "../lib/prisma"
 import { DocumentHashService } from "./document-hash.service"
 import { EmbeddingService } from "./embedding.service"
 import type { HtmlSegment } from "./text-processing.service"
 import { TextProcessingService } from "./text-processing.service"
+
+const EMBEDDING_BATCH_SIZE = 100
+const EMBEDDING_API_CONCURRENCY = 3
+
+type CrawlDocument = UpsertDocumentInput["documents"][number]
+
+type DocWithChunks = {
+  doc: CrawlDocument
+  hash: string
+  ingestChunks: IngestChunk[]
+}
+
+type ChunkWithHeading = {
+  content: string
+  heading: string | null
+}
 
 export type UpsertDocumentInput = {
   source: string
@@ -23,6 +40,27 @@ export type UpsertDocumentsResult = {
   updated: number
   deleted: number
   skipped: number
+}
+
+export function dedupeDocumentsByUrl<T extends { url: string }>(
+  documents: T[],
+): {
+  documents: T[]
+  skipped: number
+} {
+  const seen = new Set<string>()
+  const unique: T[] = []
+
+  for (const doc of documents) {
+    if (seen.has(doc.url)) continue
+    seen.add(doc.url)
+    unique.push(doc)
+  }
+
+  return {
+    documents: unique,
+    skipped: documents.length - unique.length,
+  }
 }
 
 export class DocumentService {
@@ -190,207 +228,318 @@ export class DocumentService {
     }))
   }
 
-  async upsertDocuments(
+  /**
+   * Upsert a batch of crawled documents (no stale-url deletion).
+   * Used during pipelined crawl; pass `existingByUrl` across flushes on the same crawl.
+   */
+  async upsertDocumentsBatch(
     input: UpsertDocumentInput,
+    existingByUrl: Map<string, { id: string; hash: string }>,
   ): Promise<UpsertDocumentsResult> {
-    const DOCUMENT_BATCH_SIZE = 100
     const counts: UpsertDocumentsResult = {
       created: 0,
       updated: 0,
       deleted: 0,
       skipped: 0,
     }
-    const newDocumentUrls = new Set(input.documents.map((d) => d.url))
-    const existingDocuments = await this.prisma.document.findMany({
-      where: { url: { in: input.documents.map((d) => d.url) } },
-    })
-    const existingByUrl = new Map(
-      existingDocuments.map((d) => [d.url, { id: d.id, hash: d.hash ?? "" }]),
+    if (input.documents.length === 0) return counts
+
+    const { documents, skipped } = dedupeDocumentsByUrl(input.documents)
+    counts.skipped += skipped
+
+    const urls = documents.map((d) => d.url)
+    const missingUrls = urls.filter((u) => !existingByUrl.has(u))
+    if (missingUrls.length > 0) {
+      const found = await this.prisma.document.findMany({
+        where: { url: { in: missingUrls } },
+        select: { id: true, url: true, hash: true },
+      })
+      for (const d of found) {
+        existingByUrl.set(d.url, { id: d.id, hash: d.hash ?? "" })
+      }
+    }
+
+    const documentsToCreate: CrawlDocument[] = []
+    const documentsToUpdate: CrawlDocument[] = []
+
+    for (const doc of documents) {
+      const hash = this.documentHashService.makeDocumentHash({
+        url: doc.url,
+        text: doc.text,
+      })
+      const existing = existingByUrl.get(doc.url)
+      if (!existing) {
+        documentsToCreate.push(doc)
+      } else if (existing.hash !== hash) {
+        documentsToUpdate.push(doc)
+      }
+    }
+
+    const toCreate = await this.buildDocsWithEmbeddings(
+      documentsToCreate,
+      "create",
     )
-    // All documents for this source (used later to delete stale URLs not in this crawl)
+    const toUpdate = await this.buildDocsWithEmbeddings(
+      documentsToUpdate,
+      "update",
+    )
+
+    counts.skipped +=
+      documents.length - documentsToCreate.length - documentsToUpdate.length
+    counts.created += toCreate.length
+    counts.updated += toUpdate.length
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const { doc, hash, ingestChunks } of toCreate) {
+        const created = await tx.document.create({
+          data: {
+            url: this.sanitizeTextForDb(doc.url) ?? doc.url,
+            source: this.sanitizeTextForDb(input.source) ?? input.source,
+            title: this.sanitizeTextForDb(doc.title ?? null),
+            hash: this.sanitizeTextForDb(hash) ?? hash,
+          },
+        })
+        if (ingestChunks.length > 0) {
+          await this.insertChunks(tx, created.id, ingestChunks)
+        }
+        existingByUrl.set(doc.url, { id: created.id, hash })
+      }
+
+      for (const { doc, hash, ingestChunks } of toUpdate) {
+        const existing = existingByUrl.get(doc.url)!
+        await tx.chunk.deleteMany({ where: { documentId: existing.id } })
+        await tx.document.update({
+          where: { id: existing.id },
+          data: {
+            hash: this.sanitizeTextForDb(hash) ?? hash,
+            title: this.sanitizeTextForDb(doc.title ?? null),
+          },
+        })
+        if (ingestChunks.length > 0) {
+          await this.insertChunks(tx, existing.id, ingestChunks)
+        }
+        existingByUrl.set(doc.url, { id: existing.id, hash })
+      }
+    })
+
+    return counts
+  }
+
+  /** Remove documents for `source` whose URLs were not seen in the completed crawl. */
+  async deleteStaleDocuments(
+    source: string,
+    crawledUrls: Set<string>,
+  ): Promise<number> {
     const allDocumentsForSource = await this.prisma.document.findMany({
-      where: { source: input.source },
+      where: { source },
       select: { id: true, url: true },
     })
+    const idsToDelete = allDocumentsForSource
+      .filter((d) => !crawledUrls.has(d.url))
+      .map((d) => d.id)
+    if (idsToDelete.length === 0) return 0
+    await this.prisma.document.deleteMany({
+      where: { id: { in: idsToDelete } },
+    })
+    return idsToDelete.length
+  }
 
-    const totalBatches = Math.ceil(input.documents.length / DOCUMENT_BATCH_SIZE)
+  async upsertDocuments(
+    input: UpsertDocumentInput,
+  ): Promise<UpsertDocumentsResult> {
+    const DOCUMENT_BATCH_SIZE = 100
+    const existingByUrl = new Map<string, { id: string; hash: string }>()
+    const totals: UpsertDocumentsResult = {
+      created: 0,
+      updated: 0,
+      deleted: 0,
+      skipped: 0,
+    }
+
     for (let i = 0; i < input.documents.length; i += DOCUMENT_BATCH_SIZE) {
-      const batchIndex = Math.floor(i / DOCUMENT_BATCH_SIZE) + 1
       const batch = input.documents.slice(i, i + DOCUMENT_BATCH_SIZE)
-      const documentsToCreate: typeof batch = []
-      const documentsToUpdate: typeof batch = []
+      const result = await this.upsertDocumentsBatch(
+        { source: input.source, documents: batch },
+        existingByUrl,
+      )
+      totals.created += result.created
+      totals.updated += result.updated
+      totals.skipped += result.skipped
+    }
 
-      for (const doc of batch) {
+    totals.deleted = await this.deleteStaleDocuments(
+      input.source,
+      new Set(input.documents.map((d) => d.url)),
+    )
+    return totals
+  }
+
+  private chunkDocument(doc: CrawlDocument): ChunkWithHeading[] {
+    const trimmed = doc.text.trim()
+    if (!trimmed) return []
+    if (doc.segments && doc.segments.length > 0) {
+      return this.textProcessingService.chunkTextWithHeadings(
+        trimmed,
+        doc.segments,
+      )
+    }
+    return this.textProcessingService
+      .chunkText(trimmed)
+      .filter(Boolean)
+      .map((content) => ({ content, heading: null as string | null }))
+  }
+
+  private isEmbeddingTokenLimitError(err: unknown): boolean {
+    const e = err as { status?: number; message?: string }
+    return (
+      e?.status === 400 &&
+      Boolean(
+        e?.message?.includes("maximum context length") ||
+        e?.message?.includes("8192 tokens"),
+      )
+    )
+  }
+
+  /**
+   * Chunk all docs, embed texts in global batches (parallel API calls), map back per document.
+   */
+  private async buildDocsWithEmbeddings(
+    docs: CrawlDocument[],
+    mode: "create" | "update",
+  ): Promise<DocWithChunks[]> {
+    if (docs.length === 0) return []
+
+    type PendingDoc = {
+      doc: CrawlDocument
+      hash: string
+      chunks: ChunkWithHeading[]
+    }
+
+    const pending: PendingDoc[] = []
+    for (const doc of docs) {
+      const hash = this.documentHashService.makeDocumentHash({
+        url: doc.url,
+        text: doc.text,
+      })
+      const chunks = this.chunkDocument(doc)
+      if (chunks.length === 0) {
+        if (mode === "update") {
+          pending.push({ doc, hash, chunks: [] })
+        }
+        continue
+      }
+      pending.push({ doc, hash, chunks })
+    }
+
+    const flatTexts: string[] = []
+    const sliceRanges: Array<{ docIndex: number; start: number; end: number }> =
+      []
+
+    for (let docIndex = 0; docIndex < pending.length; docIndex++) {
+      const { chunks } = pending[docIndex]!
+      if (chunks.length === 0) continue
+      const start = flatTexts.length
+      for (const c of chunks) {
+        flatTexts.push(c.content)
+      }
+      sliceRanges.push({ docIndex, start, end: flatTexts.length })
+    }
+
+    let flatEmbeddings: number[][] = []
+    if (flatTexts.length > 0) {
+      try {
+        flatEmbeddings = await this.embedTextsInParallel(flatTexts)
+      } catch (err: unknown) {
+        if (!this.isEmbeddingTokenLimitError(err)) throw err
+        console.warn("Batch embedding hit token limit; retrying per document")
+        return this.buildDocsWithEmbeddingsSequential(docs, mode)
+      }
+    }
+
+    const result: DocWithChunks[] = []
+    let rangeIdx = 0
+    for (let docIndex = 0; docIndex < pending.length; docIndex++) {
+      const { doc, hash, chunks } = pending[docIndex]!
+      if (chunks.length === 0) {
+        result.push({ doc, hash, ingestChunks: [] })
+        continue
+      }
+      const range = sliceRanges[rangeIdx]!
+      rangeIdx++
+      const docEmbeddings = flatEmbeddings.slice(range.start, range.end)
+      const ingestChunks: IngestChunk[] = chunks.map((c, idx) => ({
+        content: c.content,
+        embedding: docEmbeddings[idx]!,
+        chunkIndex: idx,
+        heading: c.heading ?? undefined,
+        tokens: c.content.length,
+      }))
+      result.push({ doc, hash, ingestChunks })
+    }
+
+    return result
+  }
+
+  private async buildDocsWithEmbeddingsSequential(
+    docs: CrawlDocument[],
+    mode: "create" | "update",
+  ): Promise<DocWithChunks[]> {
+    const result: DocWithChunks[] = []
+    for (const doc of docs) {
+      try {
         const hash = this.documentHashService.makeDocumentHash({
           url: doc.url,
           text: doc.text,
         })
-        const existing = existingByUrl.get(doc.url)
-        if (!existing) {
-          documentsToCreate.push(doc)
-        } else if (existing.hash !== hash) {
-          documentsToUpdate.push(doc)
+        const chunks = this.chunkDocument(doc)
+        if (chunks.length === 0) {
+          if (mode === "update") result.push({ doc, hash, ingestChunks: [] })
+          continue
         }
-      }
-
-      // Compute chunks and embeddings outside the transaction (no DB, keeps tx short)
-      type DocWithChunks = {
-        doc: (typeof batch)[0]
-        hash: string
-        ingestChunks: IngestChunk[]
-      }
-      const toCreate: DocWithChunks[] = []
-      for (const doc of documentsToCreate) {
-        try {
-          const hash = this.documentHashService.makeDocumentHash({
-            url: doc.url,
-            text: doc.text,
-          })
-          const trimmed = doc.text.trim()
-          const withHeadings =
-            doc.segments && doc.segments.length > 0
-              ? this.textProcessingService.chunkTextWithHeadings(
-                  trimmed,
-                  doc.segments,
-                )
-              : this.textProcessingService
-                  .chunkText(trimmed)
-                  .filter(Boolean)
-                  .map((content) => ({ content, heading: null as string | null }))
-          if (withHeadings.length === 0) continue
-          const textChunks = withHeadings.map((c) => c.content)
-          const embeddings =
-            await this.embeddingService.generateEmbeddings(textChunks)
-          const ingestChunks: IngestChunk[] = withHeadings.map((c, idx) => ({
+        const embeddings = await this.embeddingService.generateEmbeddings(
+          chunks.map((c) => c.content),
+        )
+        result.push({
+          doc,
+          hash,
+          ingestChunks: chunks.map((c, idx) => ({
             content: c.content,
             embedding: embeddings[idx]!,
             chunkIndex: idx,
             heading: c.heading ?? undefined,
             tokens: c.content.length,
-          }))
-          toCreate.push({ doc, hash, ingestChunks })
-        } catch (err: any) {
-          const isTokenLimit =
-            err?.status === 400 &&
-            (err?.message?.includes("maximum context length") ||
-              err?.message?.includes("8192 tokens"))
-          if (isTokenLimit) {
-            console.warn(`Page skipped (embedding token limit): ${doc.url}`)
-            continue
-          }
-          throw err
+          })),
+        })
+      } catch (err: unknown) {
+        if (this.isEmbeddingTokenLimitError(err)) {
+          console.warn(`Page skipped (embedding token limit): ${doc.url}`)
+          continue
         }
+        throw err
       }
+    }
+    return result
+  }
 
-      const toUpdate: DocWithChunks[] = []
-      for (const doc of documentsToUpdate) {
-        try {
-          const hash = this.documentHashService.makeDocumentHash({
-            url: doc.url,
-            text: doc.text,
-          })
-          const trimmed = doc.text.trim()
-          const withHeadings =
-            doc.segments && doc.segments.length > 0
-              ? this.textProcessingService.chunkTextWithHeadings(
-                  trimmed,
-                  doc.segments,
-                )
-              : this.textProcessingService
-                  .chunkText(trimmed)
-                  .filter(Boolean)
-                  .map((content) => ({ content, heading: null as string | null }))
-          if (withHeadings.length === 0) {
-            toUpdate.push({ doc, hash, ingestChunks: [] })
-            continue
-          }
-          const textChunks = withHeadings.map((c) => c.content)
-          const embeddings =
-            await this.embeddingService.generateEmbeddings(textChunks)
-          const ingestChunks: IngestChunk[] = withHeadings.map((c, idx) => ({
-            content: c.content,
-            embedding: embeddings[idx]!,
-            chunkIndex: idx,
-            heading: c.heading ?? undefined,
-            tokens: c.content.length,
-          }))
-          toUpdate.push({ doc, hash, ingestChunks })
-        } catch (err: any) {
-          const isTokenLimit =
-            err?.status === 400 &&
-            (err?.message?.includes("maximum context length") ||
-              err?.message?.includes("8192 tokens"))
-          if (isTokenLimit) {
-            console.warn(`Page skipped (embedding token limit): ${doc.url}`)
-            continue
-          }
-          throw err
-        }
-      }
-
-      counts.skipped +=
-        batch.length - documentsToCreate.length - documentsToUpdate.length
-      counts.created += toCreate.length
-      counts.updated += toUpdate.length
-
-      // One transaction per batch: all creates, updates, deletes, and chunk inserts commit together
-      await this.prisma.$transaction(async (tx) => {
-        for (const { doc, hash, ingestChunks } of toCreate) {
-          const created = await tx.document.create({
-            data: {
-              url: this.sanitizeTextForDb(doc.url) ?? doc.url,
-              source: this.sanitizeTextForDb(input.source) ?? input.source,
-              title: this.sanitizeTextForDb(doc.title ?? null),
-              hash: this.sanitizeTextForDb(hash) ?? hash,
-            },
-          })
-          if (ingestChunks.length > 0) {
-            await this.insertChunks(tx, created.id, ingestChunks)
-          }
-          existingByUrl.set(doc.url, { id: created.id, hash })
-        }
-
-        for (const { doc, hash, ingestChunks } of toUpdate) {
-          const existing = existingByUrl.get(doc.url)!
-          await tx.chunk.deleteMany({ where: { documentId: existing.id } })
-          await tx.document.update({
-            where: { id: existing.id },
-            data: {
-              hash: this.sanitizeTextForDb(hash) ?? hash,
-              title: this.sanitizeTextForDb(doc.title ?? null),
-            },
-          })
-          if (ingestChunks.length > 0) {
-            await this.insertChunks(tx, existing.id, ingestChunks)
-          }
-          existingByUrl.set(doc.url, { id: existing.id, hash })
-        }
-      })
-
-      console.log(`upsertDocuments batch ${batchIndex}/${totalBatches} done`, {
-        batchCreated: toCreate.length,
-        batchUpdated: toUpdate.length,
-        batchSkipped:
-          batch.length - documentsToCreate.length - documentsToUpdate.length,
-        runningTotal: {
-          created: counts.created,
-          updated: counts.updated,
-          skipped: counts.skipped,
-        },
-      })
+  /** Global OpenAI batches with limited parallel in-flight requests. */
+  private async embedTextsInParallel(texts: string[]): Promise<number[][]> {
+    if (texts.length === 0) return []
+    if (texts.length === 1) {
+      return [await this.embeddingService.generateEmbedding(texts[0]!)]
     }
 
-    const idsToDelete = allDocumentsForSource
-      .filter((d) => !newDocumentUrls.has(d.url))
-      .map((d) => d.id)
-    if (idsToDelete.length > 0) {
-      await this.prisma.document.deleteMany({
-        where: { id: { in: idsToDelete } },
-      })
-      counts.deleted = idsToDelete.length
+    const batchStarts: number[] = []
+    for (let i = 0; i < texts.length; i += EMBEDDING_BATCH_SIZE) {
+      batchStarts.push(i)
     }
 
-    return counts
+    const concurrency = EMBEDDING_API_CONCURRENCY
+    const batchResults = await mapPool(batchStarts, concurrency, (start) => {
+      const batch = texts.slice(start, start + EMBEDDING_BATCH_SIZE)
+      return this.embeddingService.generateEmbeddings(batch)
+    })
+
+    return batchResults.flat()
   }
 
   /**

@@ -37,6 +37,10 @@ yarn start:release
 | `yarn db:generate` | Regenerate Prisma Client after schema changes |
 | `yarn docker:build` | Build the Docker image tagged `civic-core-backend:local` |
 | `yarn docker:run` | Run that image on port **4000** (expects a `.env` file in this directory) |
+| `yarn crawl:sync-all` | Run weekly crawl sync for all `Jurisdiction` rows with `enabled=true` and `crawlUrl` set (requires `yarn build` first) |
+| `yarn crawl:sync-all:dev` | Same as above via `ts-node` (uses `.env`) |
+| `yarn crawl:sync-one:dev` | Sync one jurisdiction (`CRAWL_SOURCE` or `--source=`) |
+| `yarn crawl:sync-all:dev` | Sync all enabled jurisdictions sequentially (local dev) |
 
 Legacy names `prisma:migrate`, `prisma:generate`, and `prisma:migrate:production` still work and call the same Prisma commands.
 
@@ -55,10 +59,11 @@ Set these in `.env` locally, or in the Cloud Run service (or Secret Manager) for
 | `GOOGLE_API_KEY` | If using Google | Google GenAI API key |
 | `WIDGET_ALLOWED_ORIGINS` | **Yes** (for `/chat`) | Comma-separated **origins** where `widget.html` is hosted (iframe `fetch` uses this origin). Example: `https://civic-core-widget.web.app,https://app.civiccore.ai`. For Live Server, add `http://127.0.0.1:5500`. If unset or empty, chat returns **503**. |
 | `MESSAGE_ENCRYPTION_KEY` | No | Optional message encryption |
-| `DISABLE_CRAWL` | No | Set to **`true`** on Cloud Run to turn off **`/crawl`** and never load **crawlee** (crawler only runs locally). |
+| `DISABLE_CRAWL` | No | Set to **`true`** on the **API** Cloud Run service to turn off **`/crawl`** and never load **crawlee**. The weekly sync uses a separate Cloud Run **Job**, not this route. |
 | `SKIP_DB_MIGRATE` | No | Set to **`true`** to skip `prisma migrate deploy` in the container (run **`yarn db:migrate:deploy`** yourself when schema changes). |
-
 Provider-specific API keys must match `LLM_PROVIDER`.
+
+**Jurisdiction crawl config (database):** each row in `jurisdiction` can set `enabled` (include in weekly job), `crawlUrl` (seed URL), and `lastCrawl*` fields updated by the job. New sites should start with `enabled=false` until a manual crawl looks good.
 
 **CORS:** the app uses `cors()` with default options (reflective / permissive for browser preflight). Chat access is gated by **`WIDGET_ALLOWED_ORIGINS`** in [`src/lib/auth.ts`](src/lib/auth.ts).
 
@@ -224,3 +229,114 @@ yarn docker:run
 ```
 
 The app listens on [http://localhost:4000](http://localhost:4000) (`docker:run` maps host `4000` → container `8080` and sets `PORT=8080` inside the container).
+
+---
+
+## Weekly crawl sync (Cloud Run Job)
+
+Production embeddings are refreshed by a **Cloud Run Job** (`civic-core-crawl-sync`), not the public API. The API keeps `DISABLE_CRAWL=true`.
+
+The job runs [`src/jobs/sync-jurisdictions.ts`](src/jobs/sync-jurisdictions.ts) with **`CRAWL_SOURCE`** (or `--source=`) set to one jurisdiction per execution. Each run crawls the site, pipelines embed/upsert in batches during the crawl, and deletes stale documents at the end.
+
+Chunks are **2000** characters with **100** overlap (see `text-processing.service.ts`). Hash-based skip avoids re-embedding unchanged pages on weekly runs.
+
+**Schedule:** one Cloud Scheduler job **per enabled jurisdiction**, all Sunday **2:00 AM** `America/Chicago` (`0 2 * * 0`), so counties run **in parallel**.
+
+### Local test
+
+```bash
+yarn db:migrate:deploy   # if schema not applied
+yarn build
+CRAWL_SOURCE=chisago_county_mn yarn crawl:sync-one:dev
+# or
+yarn crawl:sync-all:dev -- --source=chisago_county_mn
+# all enabled (sequential, dev only):
+yarn crawl:sync-all:dev
+```
+
+### One-time GCP setup
+
+Use the same container image as the API (`civic-core-backend`). Replace placeholders (`<GCP_PROJECT_ID>`, `<REGION>`, image URL, etc.).
+
+**1. Create the job** (command override — does not start Express):
+
+```bash
+gcloud run jobs create civic-core-crawl-sync \
+  --image <REGION>-docker.pkg.dev/<GCP_PROJECT_ID>/<AR_REPO>/civic-core-backend:latest \
+  --region <REGION> \
+  --command node \
+  --args dist/src/jobs/sync-jurisdictions.js \
+  --memory 2Gi \
+  --cpu 2 \
+  --task-timeout 10800 \
+  --max-retries 0 \
+  --set-env-vars "DATABASE_URL=<YOUR_DATABASE_URL>,OPENAI_API_KEY=<KEY>"
+```
+
+Prefer Secret Manager for `DATABASE_URL` and `OPENAI_API_KEY` instead of plain `--set-env-vars` in production. Use **`task-timeout 10800`** (3 hours) or higher if a single county needs more time.
+
+**2. Scheduler service account** (if you do not already have one):
+
+```bash
+gcloud iam service-accounts create civic-core-scheduler \
+  --display-name "Civic Core Scheduler"
+```
+
+Grant permission to run the job:
+
+```bash
+gcloud run jobs add-iam-policy-binding civic-core-crawl-sync \
+  --region <REGION> \
+  --member "serviceAccount:civic-core-scheduler@<GCP_PROJECT_ID>.iam.gserviceaccount.com" \
+  --role "roles/run.developer"
+```
+
+**3. Cloud Scheduler — one trigger per jurisdiction** (Sunday 2:00 AM Central, parallel runs):
+
+Repeat for each `source` (e.g. `chisago_county_mn`). The run API accepts env overrides:
+
+```bash
+gcloud scheduler jobs create http civic-core-crawl-sync-chisago \
+  --location <REGION> \
+  --schedule "0 2 * * 0" \
+  --time-zone "America/Chicago" \
+  --uri "https://<REGION>-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/<GCP_PROJECT_ID>/jobs/civic-core-crawl-sync:run" \
+  --http-method POST \
+  --oauth-service-account-email "civic-core-scheduler@<GCP_PROJECT_ID>.iam.gserviceaccount.com" \
+  --message-body '{"overrides":{"containerOverrides":[{"env":[{"name":"CRAWL_SOURCE","value":"chisago_county_mn"}]}]}}' \
+  --headers "Content-Type=application/json"
+```
+
+**4. Manual run (single county):**
+
+```bash
+gcloud run jobs execute civic-core-crawl-sync \
+  --region <REGION> \
+  --update-env-vars "CRAWL_SOURCE=chisago_county_mn"
+```
+
+After deploying schema changes, run `yarn db:migrate:deploy` (or rely on API entrypoint migrations) before the first job execution.
+
+### Onboarding a new jurisdiction
+
+1. Insert `jurisdiction` with `enabled=false`, set `crawlUrl` to the site homepage.
+2. Run one sync: `yarn crawl:sync-all:dev -- --source=<source>` (or local `POST /crawl` when `DISABLE_CRAWL` is not set).
+3. Verify chat search quality, then set `enabled=true`.
+
+### Observability
+
+The job emits **JSON logs** to Cloud Logging:
+
+| `event` | Meaning |
+|---------|---------|
+| `crawl_sync_start` | Run started; lists `sources` |
+| `crawl_pipeline_flush` | Pipelined upsert batch during crawl |
+| `crawl_sync_jurisdiction` | Per-site result (`success` / `error`, counts, `durationMs`) |
+| `crawl_sync_complete` | Run finished (`success` or `partial_failure`) |
+| `crawl_sync_fatal` | Job crashed before finishing |
+
+`Jurisdiction.lastCrawlAt`, `lastCrawlStatus`, and `lastCrawlError` are updated after each site.
+
+**Alerting (recommended):** in Cloud Monitoring, alert when a Cloud Run Job execution fails or exits non-zero (Scheduler will show failed invocations if `process.exitCode = 1` after any jurisdiction error).
+
+Filter logs: `jsonPayload.event="crawl_sync_jurisdiction"` or `textPayload=~"crawl_sync"`.

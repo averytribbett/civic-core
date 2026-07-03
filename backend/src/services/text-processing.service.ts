@@ -1,8 +1,8 @@
 import { PDFParse } from "pdf-parse"
 
-// text-embedding-3-small max is 8192 tokens; use ~2 chars/token to stay safe → 8192*2 ≈ 16k; use 8k for headroom
-const CHUNK_SIZE = 8000
-const OVERLAP = 150
+// ~2 chars/token; 2k chars keeps chunks embed-friendly and improves RAG retrieval granularity
+const CHUNK_SIZE = 2000
+const OVERLAP = 100
 
 export type HtmlSegment = {
   heading: string | null
@@ -92,7 +92,10 @@ export class TextProcessingService {
 
     // Walk main content in document order; split on h1/h2/h3/h4 to build segments
     const segments: { heading: string | null; text: string }[] = []
-    let current: { heading: string | null; text: string } = { heading: null, text: "" }
+    let current: { heading: string | null; text: string } = {
+      heading: null,
+      text: "",
+    }
     const visit = (el: any) => {
       if (!el) return
       if (el.type === "text") {
