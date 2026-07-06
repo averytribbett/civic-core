@@ -345,6 +345,16 @@
 
   button.onclick = toggle;
 
+  window.CivicCore = {
+    open: () => {
+      if (!open) openChat();
+    },
+    close: () => {
+      if (open) closeChat();
+    },
+    toggle,
+  };
+
   window.addEventListener("message", (e) => {
     if (e.data.type === "CLOSE_WIDGET") {
       if (open) {

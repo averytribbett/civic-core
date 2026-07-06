@@ -196,6 +196,43 @@ async function markdownToHtml(text) {
   return text;
 }
 
+const MESSAGE_EXIT_MS = 420;
+
+function prefersReducedMotion() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function animateMessageIn(el) {
+  el.classList.add("message--enter");
+  if (prefersReducedMotion()) {
+    el.classList.add("message--visible");
+    return;
+  }
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      el.classList.add("message--visible");
+    });
+  });
+}
+
+function animateMessageOut(el) {
+  return new Promise((resolve) => {
+    if (prefersReducedMotion()) {
+      el.remove();
+      resolve();
+      return;
+    }
+    el.classList.remove("message--visible");
+    el.classList.add("message--exit");
+    const done = () => {
+      el.remove();
+      resolve();
+    };
+    el.addEventListener("transitionend", done, { once: true });
+    setTimeout(done, MESSAGE_EXIT_MS + 40);
+  });
+}
+
 async function addMessage(text, from, options = {}) {
   const { messageId, vote: initialVote } = options;
   const div = document.createElement("div");
@@ -268,6 +305,7 @@ async function addMessage(text, from, options = {}) {
   }
 
   messagesEl.appendChild(div);
+  animateMessageIn(div);
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
@@ -281,13 +319,15 @@ function showLoadingIndicator() {
   el.setAttribute("aria-live", "polite");
   el.innerHTML = "<span></span><span></span><span></span>";
   messagesEl.appendChild(el);
+  animateMessageIn(el);
   messagesEl.scrollTop = messagesEl.scrollHeight;
   return el;
 }
 
 function removeLoadingIndicator() {
   const el = messagesEl.querySelector(".loading-indicator");
-  if (el) el.remove();
+  if (!el) return Promise.resolve();
+  return animateMessageOut(el);
 }
 
 async function sendToBackend(message) {
@@ -325,7 +365,7 @@ form.onsubmit = async (e) => {
 
   try {
     const data = await sendToBackend(text);
-    removeLoadingIndicator();
+    await removeLoadingIndicator();
     const response = data.response;
     if (data.conversationId) conversationId = data.conversationId;
     await addMessage(response, "agent", { messageId: data.agentMessageId });
@@ -333,7 +373,7 @@ form.onsubmit = async (e) => {
     messageHistory.push({ role: "agent", content: response });
     messageHistory = messageHistory.slice(-20);
   } catch (err) {
-    removeLoadingIndicator();
+    await removeLoadingIndicator();
     await addMessage(i18n.t("errorMessage"), "agent");
     console.error("Chat error:", err);
   } finally {
@@ -364,3 +404,6 @@ applyTheme(config.theme?.color);
 
 // Apply browser-detected locale translations to static DOM elements
 i18n.applyDomTranslations();
+
+const welcomeMessage = messagesEl?.querySelector(".message.agent");
+if (welcomeMessage) animateMessageIn(welcomeMessage);

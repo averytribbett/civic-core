@@ -1,14 +1,18 @@
 import { useEffect } from 'react'
 import { Header } from './components/Header'
 import { Hero } from './components/Hero'
-import { ProductDemo } from './components/ProductDemo'
 import { HowItWorks } from './components/HowItWorks'
+import { Features } from './components/Features'
 import { PricingCTA } from './components/PricingCTA'
 import { Footer } from './components/Footer'
+import { loadWidgetScript } from './lib/widgetConfig'
+import { scrollToSection } from './lib/scrollToSection'
 import './App.css'
 
 function App() {
   useEffect(() => {
+    loadWidgetScript()
+
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
@@ -24,20 +28,25 @@ function App() {
       observer.observe(el)
     })
 
+    const hash = window.location.hash.replace('#', '')
+    if (hash) {
+      requestAnimationFrame(() => scrollToSection(hash))
+    }
+
     return () => observer.disconnect()
   }, [])
 
   return (
-    <>
+    <div className="page">
       <Header />
-      <main>
+      <main className="page__main">
         <Hero />
-        <ProductDemo />
         <HowItWorks />
+        <Features />
         <PricingCTA />
       </main>
       <Footer />
-    </>
+    </div>
   )
 }
 
