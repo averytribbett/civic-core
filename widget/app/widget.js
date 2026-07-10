@@ -107,6 +107,23 @@ function resetFormSize() {
 textarea.addEventListener("input", autoResize);
 resetFormSize();
 
+function scrollMessagesToEnd() {
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function notifyParentInputFocus(focused) {
+  window.parent.postMessage({ type: focused ? "INPUT_FOCUSED" : "INPUT_BLURRED" }, "*");
+}
+
+input.addEventListener("focus", () => {
+  scrollMessagesToEnd();
+  notifyParentInputFocus(true);
+});
+
+input.addEventListener("blur", () => {
+  notifyParentInputFocus(false);
+});
+
 input.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();

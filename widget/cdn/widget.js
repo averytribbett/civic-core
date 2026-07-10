@@ -290,6 +290,77 @@
 
   let open = false;
 
+  const MOBILE_BREAKPOINT = 768;
+
+  function isMobile() {
+    return window.innerWidth <= MOBILE_BREAKPOINT;
+  }
+
+  function lockPageScroll() {
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+  }
+
+  function unlockPageScroll() {
+    document.documentElement.style.overflow = "";
+    document.body.style.overflow = "";
+  }
+
+  function applyMobileLayout() {
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    iframe.style.top = `${vv.offsetTop}px`;
+    iframe.style.left = `${vv.offsetLeft}px`;
+    iframe.style.width = `${vv.width}px`;
+    iframe.style.height = `${vv.height}px`;
+    iframe.style.bottom = "auto";
+    iframe.style.right = "auto";
+    iframe.style.maxWidth = "none";
+    iframe.style.marginLeft = "0";
+    iframe.style.marginRight = "0";
+    iframe.style.borderRadius = "0";
+    iframe.style.boxShadow = "none";
+    button.style.visibility = "hidden";
+    button.style.pointerEvents = "none";
+    lockPageScroll();
+  }
+
+  function restoreDesktopLayout() {
+    iframe.style.top = "";
+    iframe.style.bottom = "90px";
+    iframe.style.left = "16px";
+    iframe.style.right = "16px";
+    iframe.style.width = "520px";
+    iframe.style.maxWidth = "calc(100vw - 32px)";
+    iframe.style.height = "min(500px, 85vh)";
+    iframe.style.marginLeft = align === "left" ? "" : "auto";
+    iframe.style.marginRight = align === "left" ? "auto" : "";
+    iframe.style.borderRadius = "12px";
+    iframe.style.boxShadow = "0 12px 32px rgba(0,0,0,.25)";
+    button.style.visibility = "";
+    button.style.pointerEvents = "";
+    unlockPageScroll();
+  }
+
+  function updateMobileLayout() {
+    if (!open || !isMobile()) return;
+    applyMobileLayout();
+  }
+
+  function bindMobileViewportListeners() {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    vv.addEventListener("resize", updateMobileLayout);
+    vv.addEventListener("scroll", updateMobileLayout);
+    window.addEventListener("resize", updateMobileLayout);
+    window.addEventListener("orientationchange", () => {
+      setTimeout(updateMobileLayout, 100);
+    });
+  }
+
+  bindMobileViewportListeners();
+
   function focusChatInput() {
     try {
       const doc = iframe.contentDocument || iframe.contentWindow?.document;
@@ -305,14 +376,21 @@
     button.innerHTML = closeIconSvg;
     iframe.style.display = "block";
     iframe.style.opacity = "0";
-    iframe.style.transform = "scale(0.92) translateY(8px)";
+    if (isMobile()) {
+      updateMobileLayout();
+      iframe.style.transform = "translateY(100%)";
+    } else {
+      iframe.style.transform = "scale(0.92) translateY(8px)";
+    }
     iframe.offsetHeight; // force reflow so transition runs
     iframe.style.opacity = "1";
-    iframe.style.transform = "scale(1) translateY(0)";
-    if (iframe.contentDocument?.getElementById("input")) {
-      focusChatInput();
-    } else {
-      iframe.addEventListener("load", focusChatInput, { once: true });
+    iframe.style.transform = isMobile() ? "translateY(0)" : "scale(1) translateY(0)";
+    if (!isMobile()) {
+      if (iframe.contentDocument?.getElementById("input")) {
+        focusChatInput();
+      } else {
+        iframe.addEventListener("load", focusChatInput, { once: true });
+      }
     }
   }
 
@@ -320,13 +398,17 @@
     open = false;
     button.setAttribute("aria-expanded", "false");
     button.innerHTML = chatIconSvg;
+    button.style.visibility = "";
+    button.style.pointerEvents = "";
     iframe.style.opacity = "0";
-    iframe.style.transform = "scale(0.92) translateY(8px)";
+    iframe.style.transform = isMobile() ? "translateY(100%)" : "scale(0.92) translateY(8px)";
+    unlockPageScroll();
     button.focus();
   }
 
   function onChatClosed() {
     iframe.style.display = "none";
+    restoreDesktopLayout();
   }
 
   iframe.addEventListener("transitionend", (e) => {
@@ -362,6 +444,13 @@
       } else {
         onChatClosed();
       }
+    } else if (e.data.type === "INPUT_FOCUSED") {
+      updateMobileLayout();
+      requestAnimationFrame(updateMobileLayout);
+      setTimeout(updateMobileLayout, 150);
+      setTimeout(updateMobileLayout, 350);
+    } else if (e.data.type === "INPUT_BLURRED") {
+      setTimeout(updateMobileLayout, 80);
     }
   });
 
