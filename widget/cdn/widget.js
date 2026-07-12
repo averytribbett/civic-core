@@ -22,17 +22,20 @@
 
   // Inline translations for the CDN-hosted elements (button, tooltip)
   var cdnLocales = {
-    en: { openChat: "Open chat", closeTooltip: "Close", tooltipPrompt: "Need assistance? ", tooltipAsk: "Ask about ", tooltipDots: "...", tooltipWords: ["permits", "meetings", "services", "events"] },
-    es: { openChat: "Abrir chat", closeTooltip: "Cerrar", tooltipPrompt: "¿Necesitas ayuda? ", tooltipAsk: "Pregunta sobre ", tooltipDots: "...", tooltipWords: ["permisos", "reuniones", "servicios", "eventos"] },
-    fr: { openChat: "Ouvrir le chat", closeTooltip: "Fermer", tooltipPrompt: "Besoin d'aide ? ", tooltipAsk: "Renseignez-vous sur ", tooltipDots: "...", tooltipWords: ["permis", "réunions", "services", "événements"] },
-    de: { openChat: "Chat öffnen", closeTooltip: "Schließen", tooltipPrompt: "Brauchen Sie Hilfe? ", tooltipAsk: "Fragen Sie nach ", tooltipDots: "...", tooltipWords: ["Genehmigungen", "Sitzungen", "Diensten", "Veranstaltungen"] },
-    zh: { openChat: "打开聊天", closeTooltip: "关闭", tooltipPrompt: "需要帮助？", tooltipAsk: "了解关于", tooltipDots: "...", tooltipWords: ["许可证", "会议", "服务", "活动"] },
-    ja: { openChat: "チャットを開く", closeTooltip: "閉じる", tooltipPrompt: "お困りですか？", tooltipAsk: "", tooltipDots: "...", tooltipWords: ["許可証", "会議", "サービス", "イベント"] },
-    pt: { openChat: "Abrir chat", closeTooltip: "Fechar", tooltipPrompt: "Precisa de ajuda? ", tooltipAsk: "Pergunte sobre ", tooltipDots: "...", tooltipWords: ["licenças", "reuniões", "serviços", "eventos"] },
-    ar: { openChat: "فتح الدردشة", closeTooltip: "إغلاق", tooltipPrompt: "هل تحتاج مساعدة؟ ", tooltipAsk: "اسأل عن ", tooltipDots: "...", tooltipWords: ["التصاريح", "الاجتماعات", "الخدمات", "الفعاليات"] },
-    ko: { openChat: "채팅 열기", closeTooltip: "닫기", tooltipPrompt: "도움이 필요하신가요? ", tooltipAsk: "", tooltipDots: "...", tooltipWords: ["허가", "회의", "서비스", "행사"] },
+    en: { openChat: "Open chat", closeChat: "Close chat", chatWidget: "Chat widget", closeTooltip: "Close", tooltipPrompt: "Need assistance? ", tooltipAsk: "Ask about ", tooltipDots: "...", tooltipWords: ["permits", "meetings", "services", "events"] },
+    es: { openChat: "Abrir chat", closeChat: "Cerrar chat", chatWidget: "Widget de chat", closeTooltip: "Cerrar", tooltipPrompt: "¿Necesitas ayuda? ", tooltipAsk: "Pregunta sobre ", tooltipDots: "...", tooltipWords: ["permisos", "reuniones", "servicios", "eventos"] },
+    fr: { openChat: "Ouvrir le chat", closeChat: "Fermer le chat", chatWidget: "Widget de chat", closeTooltip: "Fermer", tooltipPrompt: "Besoin d'aide ? ", tooltipAsk: "Renseignez-vous sur ", tooltipDots: "...", tooltipWords: ["permis", "réunions", "services", "événements"] },
+    de: { openChat: "Chat öffnen", closeChat: "Chat schließen", chatWidget: "Chat-Widget", closeTooltip: "Schließen", tooltipPrompt: "Brauchen Sie Hilfe? ", tooltipAsk: "Fragen Sie nach ", tooltipDots: "...", tooltipWords: ["Genehmigungen", "Sitzungen", "Diensten", "Veranstaltungen"] },
+    zh: { openChat: "打开聊天", closeChat: "关闭聊天", chatWidget: "聊天窗口", closeTooltip: "关闭", tooltipPrompt: "需要帮助？", tooltipAsk: "了解关于", tooltipDots: "...", tooltipWords: ["许可证", "会议", "服务", "活动"] },
+    ja: { openChat: "チャットを開く", closeChat: "チャットを閉じる", chatWidget: "チャットウィジェット", closeTooltip: "閉じる", tooltipPrompt: "お困りですか？", tooltipAsk: "", tooltipDots: "...", tooltipWords: ["許可証", "会議", "サービス", "イベント"] },
+    pt: { openChat: "Abrir chat", closeChat: "Fechar chat", chatWidget: "Widget de chat", closeTooltip: "Fechar", tooltipPrompt: "Precisa de ajuda? ", tooltipAsk: "Pergunte sobre ", tooltipDots: "...", tooltipWords: ["licenças", "reuniões", "serviços", "eventos"] },
+    ar: { openChat: "فتح الدردشة", closeChat: "إغلاق الدردشة", chatWidget: "أداة الدردشة", closeTooltip: "إغلاق", tooltipPrompt: "هل تحتاج مساعدة؟ ", tooltipAsk: "اسأل عن ", tooltipDots: "...", tooltipWords: ["التصاريح", "الاجتماعات", "الخدمات", "الفعاليات"] },
+    ko: { openChat: "채팅 열기", closeChat: "채팅 닫기", chatWidget: "채팅 위젯", closeTooltip: "닫기", tooltipPrompt: "도움이 필요하신가요? ", tooltipAsk: "", tooltipDots: "...", tooltipWords: ["허가", "회의", "서비스", "행사"] },
   };
   var loc = cdnLocales[lang] || cdnLocales.en;
+
+  const themeColor = config.theme?.color || "#2563eb";
+  const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   // Focus-visible styles for launcher and tooltip (ADA)
   const style = document.createElement("style");
@@ -56,7 +59,7 @@
     height: "56px",
     borderRadius: "50%",
     border: "none",
-    background: config.theme?.color || "#2563eb",
+    background: themeColor,
     color: "#fff",
     fontSize: "24px",
     cursor: "pointer",
@@ -70,8 +73,8 @@
   // Floating tooltip with typewriter animation — removed after first open
   let tooltipDismissed = false;
   const tooltip = document.createElement("div");
+  tooltip.id = "civiccore-widget-tooltip";
   tooltip.setAttribute("role", "tooltip");
-  const themeColor = config.theme?.color || "#2563eb";
   Object.assign(tooltip.style, {
     position: "fixed",
     bottom: "86px",
@@ -87,8 +90,8 @@
     maxWidth: "260px",
     minHeight: "20px",
     opacity: "0",
-    transform: "translateY(6px)",
-    transition: "opacity 0.2s ease, transform 0.2s ease",
+    transform: prefersReducedMotion ? "none" : "translateY(6px)",
+    transition: prefersReducedMotion ? "none" : "opacity 0.2s ease, transform 0.2s ease",
     display: "flex",
     alignItems: "flex-start",
     gap: "8px"
@@ -103,9 +106,11 @@
   tooltipClose.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="16" height="16" aria-hidden="true"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
   Object.assign(tooltipClose.style, {
     position: "absolute",
-    top: "-6px",
-    right: "-6px",
-    padding: "2px",
+    top: "-8px",
+    right: "-8px",
+    width: "24px",
+    height: "24px",
+    padding: "4px",
     border: "none",
     background: themeColor,
     color: "#fff",
@@ -121,11 +126,13 @@
   tooltipClose.addEventListener("mouseleave", () => { tooltipClose.style.filter = ""; });
   tooltip.appendChild(tooltipClose);
   document.body.appendChild(tooltip);
+  button.setAttribute("aria-describedby", "civiccore-widget-tooltip");
 
   const TOOLTIP_PROMPT = loc.tooltipPrompt;
   const TOOLTIP_ASK = loc.tooltipAsk;
   const TOOLTIP_DOTS = loc.tooltipDots;
   const TOOLTIP_WORDS = loc.tooltipWords;
+  const TOOLTIP_STATIC = TOOLTIP_PROMPT + TOOLTIP_ASK + (TOOLTIP_WORDS[0] || "") + TOOLTIP_DOTS;
   const TYPING_MS_PER_CHAR = 55;
   const HOLD_MS_AFTER_TYPING = 1000;
   const DELETING_MS_PER_CHAR = 35;
@@ -139,10 +146,15 @@
       clearTimeout(tooltipTimeoutId);
       tooltipTimeoutId = null;
     }
+    button.removeAttribute("aria-describedby");
     tooltip.style.opacity = "0";
-    tooltip.style.transform = "translateY(6px)";
-    setTimeout(() => tooltip.remove(), 220);
+    if (!prefersReducedMotion) tooltip.style.transform = "translateY(6px)";
+    setTimeout(() => tooltip.remove(), prefersReducedMotion ? 0 : 220);
   }
+
+  button.addEventListener("focus", () => {
+    if (!tooltipDismissed) dismissTooltip();
+  });
 
   tooltipClose.onclick = (e) => {
     e.stopPropagation();
@@ -235,8 +247,12 @@
   requestAnimationFrame(() => {
     if (!tooltipDismissed) {
       tooltip.style.opacity = "1";
-      tooltip.style.transform = "translateY(0)";
-      runTooltipTypewriter();
+      if (!prefersReducedMotion) tooltip.style.transform = "translateY(0)";
+      if (prefersReducedMotion) {
+        tooltipText.textContent = TOOLTIP_STATIC;
+      } else {
+        runTooltipTypewriter();
+      }
     }
   });
 
@@ -261,9 +277,11 @@
     launcherOrigin && new URL("app/widget.html", launcherOrigin + "/").toString();
   const shellRaw = (config.widgetUrl && String(config.widgetUrl).trim()) || shellFromLauncher || "";
   iframe.src = shellRaw ? resolveChatShellUrl(shellRaw) : "https://app.civiccore.ai/app/widget.html";
-  iframe.setAttribute("title", loc.openChat);
+  iframe.setAttribute("title", loc.chatWidget || loc.openChat);
 
-  const iframeTransition = "opacity 0.22s ease-out, transform 0.22s ease-out";
+  const iframeTransition = prefersReducedMotion
+    ? "none"
+    : "opacity 0.22s ease-out, transform 0.22s ease-out";
   // Responsive: on mobile use most of the viewport so the chat isn't tiny
   Object.assign(iframe.style, {
     position: "fixed",
@@ -289,6 +307,24 @@
   document.body.appendChild(iframe);
 
   let open = false;
+  let inertedElements = [];
+
+  function trapFocus() {
+    inertedElements = [];
+    Array.from(document.body.children).forEach((child) => {
+      if (child !== button && child !== iframe && child !== tooltip) {
+        child.inert = true;
+        inertedElements.push(child);
+      }
+    });
+  }
+
+  function releaseFocusTrap() {
+    inertedElements.forEach((el) => {
+      el.inert = false;
+    });
+    inertedElements = [];
+  }
 
   const MOBILE_BREAKPOINT = 768;
 
@@ -343,16 +379,31 @@
     unlockPageScroll();
   }
 
+  function notifyIframeLayout() {
+    try {
+      iframe.contentWindow?.postMessage(
+        { type: "LAYOUT", mobile: isMobile() },
+        "*"
+      );
+    } catch (_) {}
+  }
+
   function updateMobileLayout() {
-    if (!open || !isMobile()) return;
-    applyMobileLayout();
+    notifyIframeLayout();
+    if (!open) return;
+    if (isMobile()) {
+      applyMobileLayout();
+    } else {
+      restoreDesktopLayout();
+    }
   }
 
   function bindMobileViewportListeners() {
     const vv = window.visualViewport;
-    if (!vv) return;
-    vv.addEventListener("resize", updateMobileLayout);
-    vv.addEventListener("scroll", updateMobileLayout);
+    if (vv) {
+      vv.addEventListener("resize", updateMobileLayout);
+      vv.addEventListener("scroll", updateMobileLayout);
+    }
     window.addEventListener("resize", updateMobileLayout);
     window.addEventListener("orientationchange", () => {
       setTimeout(updateMobileLayout, 100);
@@ -369,39 +420,60 @@
     } catch (_) {}
   }
 
+  function scheduleFocusChatInput() {
+    if (iframe.contentDocument?.getElementById("input")) {
+      focusChatInput();
+    } else {
+      iframe.addEventListener("load", focusChatInput, { once: true });
+    }
+    if (isMobile()) {
+      setTimeout(focusChatInput, 150);
+      setTimeout(focusChatInput, 350);
+    }
+  }
+
   function openChat() {
     open = true;
     button.setAttribute("aria-expanded", "true");
+    button.setAttribute("aria-label", loc.closeChat);
     dismissTooltip();
     button.innerHTML = closeIconSvg;
     iframe.style.display = "block";
-    iframe.style.opacity = "0";
-    if (isMobile()) {
-      updateMobileLayout();
-      iframe.style.transform = "translateY(100%)";
+    trapFocus();
+    if (prefersReducedMotion) {
+      iframe.style.opacity = "1";
+      iframe.style.transform = isMobile() ? "translateY(0)" : "scale(1) translateY(0)";
     } else {
-      iframe.style.transform = "scale(0.92) translateY(8px)";
-    }
-    iframe.offsetHeight; // force reflow so transition runs
-    iframe.style.opacity = "1";
-    iframe.style.transform = isMobile() ? "translateY(0)" : "scale(1) translateY(0)";
-    if (!isMobile()) {
-      if (iframe.contentDocument?.getElementById("input")) {
-        focusChatInput();
+      iframe.style.opacity = "0";
+      if (isMobile()) {
+        updateMobileLayout();
+        iframe.style.transform = "translateY(100%)";
       } else {
-        iframe.addEventListener("load", focusChatInput, { once: true });
+        iframe.style.transform = "scale(0.92) translateY(8px)";
       }
+      iframe.offsetHeight;
+      iframe.style.opacity = "1";
+      iframe.style.transform = isMobile() ? "translateY(0)" : "scale(1) translateY(0)";
     }
+    if (isMobile()) updateMobileLayout();
+    scheduleFocusChatInput();
   }
 
   function closeChat() {
     open = false;
     button.setAttribute("aria-expanded", "false");
+    button.setAttribute("aria-label", loc.openChat);
     button.innerHTML = chatIconSvg;
     button.style.visibility = "";
     button.style.pointerEvents = "";
-    iframe.style.opacity = "0";
-    iframe.style.transform = isMobile() ? "translateY(100%)" : "scale(0.92) translateY(8px)";
+    releaseFocusTrap();
+    if (prefersReducedMotion) {
+      iframe.style.opacity = "0";
+      onChatClosed();
+    } else {
+      iframe.style.opacity = "0";
+      iframe.style.transform = isMobile() ? "translateY(100%)" : "scale(0.92) translateY(8px)";
+    }
     unlockPageScroll();
     button.focus();
   }
@@ -456,7 +528,7 @@
 
   iframe.onload = () => {
     iframe.contentWindow.postMessage(
-      { type: "INIT", config },
+      { type: "INIT", config, mobile: isMobile() },
       "*"
     );
   };

@@ -16,34 +16,46 @@ const LOCALE_NAMES = {
 // Build and wire custom language dropdown (avoids native select overflow on mobile)
 const langTrigger = document.getElementById("lang-trigger");
 const langDropdown = document.getElementById("lang-dropdown");
+let langOptions = [];
+
+function updateLangTriggerLabel() {
+  if (!langTrigger) return;
+  const name = LOCALE_NAMES[i18n.locale] || i18n.locale;
+  langTrigger.textContent = name;
+  langTrigger.setAttribute("aria-label", `${i18n.t("languageLabel")}, ${name}`);
+}
+
+function closeLangDropdown() {
+  if (!langDropdown || !langTrigger) return;
+  langDropdown.setAttribute("aria-hidden", "true");
+  langTrigger.setAttribute("aria-expanded", "false");
+}
+
+function openLangDropdown() {
+  if (!langDropdown || !langTrigger) return;
+  langDropdown.setAttribute("aria-hidden", "false");
+  langTrigger.setAttribute("aria-expanded", "true");
+  const selectedIdx = langOptions.findIndex((opt) => opt.dataset.lang === i18n.locale);
+  const focusIdx = selectedIdx >= 0 ? selectedIdx : 0;
+  langOptions[focusIdx]?.focus();
+}
+
 if (langTrigger && langDropdown) {
   const locales = Object.keys(window.__CHAT_LOCALES || {}).sort();
 
-  function setLangLabel() {
-    langTrigger.textContent = LOCALE_NAMES[i18n.locale] || i18n.locale;
-  }
-
-  function closeDropdown() {
-    langDropdown.setAttribute("aria-hidden", "true");
-    langTrigger.setAttribute("aria-expanded", "false");
-  }
-
   function selectLocale(code) {
     i18n.setLocale(code);
-    setLangLabel();
-    closeDropdown();
-    // Re-apply header name: keep client's county/city name
+    updateLangTriggerLabel();
+    closeLangDropdown();
     const nameEl = document.getElementById("chat-name");
     if (nameEl) {
       nameEl.textContent = config.name || i18n.t("headerDefaultName");
     }
-    // Re-apply welcome message with county name
     const welcomeEl = document.getElementById("welcome-message");
     if (welcomeEl) {
       const displayName = config.name || i18n.t("defaultName");
       welcomeEl.innerHTML = i18n.t("welcomeMessage", { name: displayName });
     }
-    // Update selected state in dropdown
     langDropdown.querySelectorAll("[role='option']").forEach((opt) => {
       opt.setAttribute("aria-selected", opt.dataset.lang === code ? "true" : "false");
     });
@@ -54,27 +66,62 @@ if (langTrigger && langDropdown) {
     opt.type = "button";
     opt.className = "chat-header-lang-option";
     opt.role = "option";
+    opt.id = `lang-option-${code}`;
     opt.dataset.lang = code;
     opt.textContent = LOCALE_NAMES[code] || code;
     opt.setAttribute("aria-selected", code === i18n.locale ? "true" : "false");
     opt.addEventListener("click", () => selectLocale(code));
     langDropdown.appendChild(opt);
+    langOptions.push(opt);
   });
 
-  setLangLabel();
+  updateLangTriggerLabel();
 
   langTrigger.addEventListener("click", (e) => {
     e.stopPropagation();
     const isOpen = langDropdown.getAttribute("aria-hidden") === "false";
     if (isOpen) {
-      closeDropdown();
+      closeLangDropdown();
     } else {
-      langDropdown.setAttribute("aria-hidden", "false");
-      langTrigger.setAttribute("aria-expanded", "true");
+      openLangDropdown();
     }
   });
 
-  document.addEventListener("click", () => closeDropdown());
+  langTrigger.addEventListener("keydown", (e) => {
+    if (
+      langDropdown.getAttribute("aria-hidden") === "true" &&
+      (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter" || e.key === " ")
+    ) {
+      e.preventDefault();
+      openLangDropdown();
+    }
+  });
+
+  langDropdown.addEventListener("keydown", (e) => {
+    const idx = langOptions.indexOf(document.activeElement);
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      langOptions[Math.min(idx + 1, langOptions.length - 1)]?.focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      langOptions[Math.max(idx - 1, 0)]?.focus();
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      langOptions[0]?.focus();
+    } else if (e.key === "End") {
+      e.preventDefault();
+      langOptions[langOptions.length - 1]?.focus();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      closeLangDropdown();
+      langTrigger.focus();
+    } else if ((e.key === "Enter" || e.key === " ") && document.activeElement?.dataset?.lang) {
+      e.preventDefault();
+      selectLocale(document.activeElement.dataset.lang);
+    }
+  });
+
+  document.addEventListener("click", () => closeLangDropdown());
   langDropdown.addEventListener("click", (e) => e.stopPropagation());
 }
 
@@ -198,9 +245,25 @@ function applyConfig(c) {
   if (welcomeEl) welcomeEl.innerHTML = i18n.t("welcomeMessage", { name: displayName });
 }
 
+/** Host page tells us mobile vs desktop (iframe width is not the browser width). */
+function setMobileLayout(mobile) {
+  document.documentElement.classList.toggle("is-mobile", !!mobile);
+}
+
+// Standalone fallback when not embedded (e.g. widget.html opened directly)
+if (window.parent === window) {
+  const mq = window.matchMedia("(max-width: 768px)");
+  setMobileLayout(mq.matches);
+  mq.addEventListener("change", (e) => setMobileLayout(e.matches));
+}
+
 window.addEventListener("message", (e) => {
+  if (!e.data || typeof e.data !== "object") return;
   if (e.data.type === "INIT" && e.data.config) {
     applyConfig(e.data.config);
+    if (typeof e.data.mobile === "boolean") setMobileLayout(e.data.mobile);
+  } else if (e.data.type === "LAYOUT" && typeof e.data.mobile === "boolean") {
+    setMobileLayout(e.data.mobile);
   }
 });
 
@@ -269,6 +332,9 @@ async function addMessage(text, from, options = {}) {
       a.setAttribute("target", "_blank");
       a.setAttribute("rel", "noopener noreferrer");
     });
+    body.querySelectorAll("img:not([alt])").forEach((img) => {
+      img.setAttribute("alt", "");
+    });
   } else {
     body.textContent = text;
   }
@@ -278,7 +344,7 @@ async function addMessage(text, from, options = {}) {
     const actions = document.createElement("div");
     actions.className = "message-actions";
     const thumbsUpSvg =
-      '<svg class="vote-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>';
+      '<svg class="vote-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>';
     const upBtn = document.createElement("button");
     upBtn.type = "button";
     upBtn.className = "vote-btn vote-up" + (initialVote === "up" ? " active" : "");
@@ -293,6 +359,8 @@ async function addMessage(text, from, options = {}) {
     const setVote = (v) => {
       upBtn.classList.toggle("active", v === "up");
       downBtn.classList.toggle("active", v === "down");
+      upBtn.setAttribute("aria-pressed", v === "up" ? "true" : "false");
+      downBtn.setAttribute("aria-pressed", v === "down" ? "true" : "false");
       div.dataset.vote = v || "";
     };
     setVote(initialVote || "");
@@ -328,13 +396,24 @@ async function addMessage(text, from, options = {}) {
 
 function setLoading(loading) {
   sendBtn.disabled = loading;
+  form.setAttribute("aria-busy", loading ? "true" : "false");
 }
 
 function showLoadingIndicator() {
   const el = document.createElement("div");
   el.className = "message agent loading-indicator";
-  el.setAttribute("aria-live", "polite");
-  el.innerHTML = "<span></span><span></span><span></span>";
+  el.setAttribute("role", "status");
+  const label = document.createElement("span");
+  label.className = "sr-only";
+  label.textContent = i18n.t("loadingResponse");
+  el.appendChild(label);
+  const dotsWrap = document.createElement("span");
+  dotsWrap.className = "loading-dots";
+  dotsWrap.setAttribute("aria-hidden", "true");
+  for (let i = 0; i < 3; i++) {
+    dotsWrap.appendChild(document.createElement("span"));
+  }
+  el.appendChild(dotsWrap);
   messagesEl.appendChild(el);
   animateMessageIn(el);
   messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -406,10 +485,11 @@ if (closeBtn) {
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
-    const langDropdown = document.getElementById("lang-dropdown");
-    if (langDropdown?.getAttribute("aria-hidden") === "false") {
-      langDropdown.setAttribute("aria-hidden", "true");
-      document.getElementById("lang-trigger")?.setAttribute("aria-expanded", "false");
+    const dropdown = document.getElementById("lang-dropdown");
+    const trigger = document.getElementById("lang-trigger");
+    if (dropdown?.getAttribute("aria-hidden") === "false") {
+      closeLangDropdown();
+      trigger?.focus();
       return;
     }
     window.parent.postMessage({ type: "CLOSE_WIDGET" }, "*");
@@ -421,6 +501,7 @@ applyTheme(config.theme?.color);
 
 // Apply browser-detected locale translations to static DOM elements
 i18n.applyDomTranslations();
+updateLangTriggerLabel();
 
 const welcomeMessage = messagesEl?.querySelector(".message.agent");
 if (welcomeMessage) animateMessageIn(welcomeMessage);

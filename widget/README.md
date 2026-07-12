@@ -81,4 +81,30 @@ Express uses permissive **`cors()`** (no origin allowlist at the middleware laye
 
 ### Accessibility (WCAG 2.1 AA)
 
-The widget targets ADA-friendly behavior. Default theme `#2563eb` meets WCAG AA for white text on the launcher. Custom `theme.color` should maintain contrast (e.g. WebAIM contrast checker).
+The widget targets ADA-friendly behavior aligned with **WCAG 2.1 Level AA**.
+
+- Default theme `#2563eb` meets WCAG AA for white text on the launcher and send button.
+- Counties can set `theme.color` to match their branding; choose a color with sufficient contrast against white text on the launcher and send button.
+- The embed has two layers: the CDN launcher (`cdn/widget.js`) and the chat shell (`app/widget.html`). Test both when validating accessibility.
+- Arabic (`ar`) sets `dir="rtl"` on the chat shell.
+
+#### Automated check
+
+```bash
+cd widget
+yarn install
+# one-time if Chrome for Testing is missing:
+yarn puppeteer browsers install chrome
+yarn test:a11y
+```
+
+Runs axe-core against `demo.html`, the open chat iframe, and the standalone shell. Requires Puppeteer’s Chrome for Testing binary (downloaded into `~/.cache/puppeteer`).
+
+#### Manual test checklist
+
+- [ ] **Keyboard only:** Tab to launcher → Enter to open → type and send a message → open language list (arrows/Home/End) → Escape to close dropdown → Escape to close chat
+- [ ] **Screen reader:** Launcher announces Open/Close correctly; new messages announced in chat log; loading state announced; vote buttons report pressed state
+- [ ] **200% zoom:** Layout remains usable on desktop and mobile widths
+- [ ] **Reduced motion:** Enable OS “reduce motion”; tooltip shows static text; message/iframe animations minimized
+- [ ] **Arabic:** Switch language to العربية; layout mirrors (RTL)
+- [ ] **Custom theme:** Confirm county brand color renders correctly on launcher and send button

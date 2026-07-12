@@ -19,4 +19,6 @@
   tooltipWords: ["許可証", "会議", "サービス", "イベント"],
   languageLabel: "言語",
   messagesLabel: "チャットメッセージ",
+  loadingResponse: "応答を読み込み中",
+  closeChat: "チャットを閉じる",
 };

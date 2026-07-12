@@ -19,4 +19,6 @@
   tooltipWords: ["Genehmigungen", "Sitzungen", "Diensten", "Veranstaltungen"],
   languageLabel: "Sprache",
   messagesLabel: "Chat-Nachrichten",
+  loadingResponse: "Antwort wird geladen",
+  closeChat: "Chat schließen",
 };

@@ -19,4 +19,6 @@
   tooltipWords: ["permis", "réunions", "services", "événements"],
   languageLabel: "Langue",
   messagesLabel: "Messages du chat",
+  loadingResponse: "Chargement de la réponse",
+  closeChat: "Fermer le chat",
 };

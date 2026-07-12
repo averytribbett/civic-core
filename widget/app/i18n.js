@@ -15,8 +15,13 @@ window.i18n = (function () {
     return locales[browserLang] ? browserLang : "en";
   }
 
+  function applyDocumentDirection(locale) {
+    document.documentElement.dir = locale === "ar" ? "rtl" : "ltr";
+  }
+
   let currentLocale = detectLocale();
   document.documentElement.lang = currentLocale;
+  applyDocumentDirection(currentLocale);
 
   function resolve(key) {
     const dict = locales[currentLocale] || locales.en || {};
@@ -68,6 +73,7 @@ window.i18n = (function () {
   function setLocale(lang) {
     currentLocale = locales[lang] ? lang : "en";
     document.documentElement.lang = currentLocale;
+    applyDocumentDirection(currentLocale);
     applyDomTranslations();
   }
 

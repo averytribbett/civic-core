@@ -9,3 +9,5 @@ firebase-debug.*.log
 .agents/
 .claude/
 skills-lock.json
+
+node_modules/

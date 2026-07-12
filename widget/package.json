@@ -6,6 +6,11 @@
     "prepare-hosting": "node scripts/prepare-hosting.mjs",
     "verify:hosting": "node scripts/verify-hosting.mjs",
     "deploy:hosting": "yarn prepare-hosting && yarn verify:hosting && firebase deploy --only hosting",
-    "deploy:firebase": "yarn deploy:hosting"
+    "deploy:firebase": "yarn deploy:hosting",
+    "test:a11y": "node scripts/a11y-check.mjs"
+  },
+  "devDependencies": {
+    "axe-core": "^4.10.3",
+    "puppeteer": "^24.2.0"
   }
 }

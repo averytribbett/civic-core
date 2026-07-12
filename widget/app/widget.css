@@ -5,6 +5,19 @@
   --chat-primary-rgb: 37, 99, 235;
 }
 
+/* ========== Accessibility ========== */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* ========== Base ========== */
 * {
   box-sizing: border-box;
@@ -57,6 +70,7 @@ body {
   font-size: 16px;
   font-weight: 600;
   color: #1e293b;
+  margin: 0;
 }
 
 .chat-header-close {
@@ -197,10 +211,18 @@ body {
   transition: background 0.1s;
 }
 
-.chat-header-lang-option:hover,
-.chat-header-lang-option:focus {
+.chat-header-lang-option:hover {
   background: #f1f5f9;
+}
+
+.chat-header-lang-option:focus {
   outline: none;
+}
+
+.chat-header-lang-option:focus-visible {
+  outline: 2px solid var(--chat-primary);
+  outline-offset: -2px;
+  background: #f1f5f9;
 }
 
 .chat-header-lang-option[aria-selected="true"] {
@@ -497,20 +519,33 @@ body {
   min-height: 44px;
 }
 
-.loading-indicator span {
+.loading-indicator .loading-dots {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.loading-indicator .loading-dots span {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #94a3b8;
+  background: #64748b;
   animation: loading-dot 0.9s cubic-bezier(0.45, 0, 0.55, 1) infinite both;
 }
 
-.loading-indicator span:nth-child(2) {
+.loading-indicator .loading-dots span:nth-child(2) {
   animation-delay: 0.15s;
 }
 
-.loading-indicator span:nth-child(3) {
+.loading-indicator .loading-dots span:nth-child(3) {
   animation-delay: 0.3s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-indicator .loading-dots span {
+    animation: none;
+    opacity: 0.7;
+  }
 }
 
 @keyframes loading-dot {
@@ -701,92 +736,148 @@ body {
   color: var(--chat-primary-hover);
 }
 
-/* Mobile fullscreen: flex input bar so send button stays aligned */
-@media (max-width: 768px) {
-  .chat-header {
-    padding: max(8px, env(safe-area-inset-top)) 12px 8px;
-    gap: 8px;
-  }
+/*
+ * Mobile styles are gated by html.is-mobile (set by the embed script from
+ * the host page width), not @media — the iframe is ~520px wide on desktop
+ * and would otherwise always match a 768px breakpoint.
+ */
+html.is-mobile .chat-header {
+  padding: max(8px, env(safe-area-inset-top)) 12px 8px;
+  gap: 8px;
+}
 
-  .chat-header-name {
-    display: none;
-  }
+html.is-mobile .chat-header-name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 
-  .chat-header-logo {
-    width: 28px;
-    height: 28px;
-    margin-right: auto;
-  }
+html.is-mobile .chat-header-logo {
+  width: 28px;
+  height: 28px;
+  margin-right: auto;
+}
 
-  .chat-header-close {
-    width: 32px;
-    height: 32px;
-  }
+html.is-mobile .chat-header-close {
+  width: 32px;
+  height: 32px;
+}
 
-  .messages-viewport {
-    display: flex;
-    flex-direction: column;
-  }
+html.is-mobile .messages-viewport {
+  display: flex;
+  flex-direction: column;
+}
 
-  .messages {
-    position: relative;
-    flex: 1 1 auto;
-    min-height: 0;
-    top: auto;
-    left: auto;
-    right: auto;
-    bottom: auto;
-    padding: 12px;
-  }
+html.is-mobile .messages {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  top: auto;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  padding: 12px;
+}
 
-  .input-form {
-    position: relative;
-    flex-shrink: 0;
-    bottom: auto;
-    left: auto;
-    right: auto;
-    margin: 0 12px max(12px, env(safe-area-inset-bottom));
-    min-height: 48px;
-    padding: 6px 48px 6px 14px;
-    align-items: center;
-  }
+html.is-mobile .input-form {
+  position: relative;
+  flex-shrink: 0;
+  bottom: auto;
+  left: auto;
+  right: auto;
+  margin: 0 12px max(12px, env(safe-area-inset-bottom));
+  min-height: 48px;
+  padding: 6px 48px 6px 14px;
+  align-items: center;
+}
 
-  .input-form.multiline {
-    align-items: flex-end;
-    padding-bottom: 48px;
-    padding-right: 6px;
-  }
+html.is-mobile .input-form.multiline {
+  align-items: flex-end;
+  padding-bottom: 48px;
+  padding-right: 6px;
+}
 
-  .send-btn {
-    right: 8px;
-    top: 50%;
-    bottom: auto;
-    transform: translateY(-50%);
-    width: 34px;
-    height: 34px;
-  }
+html.is-mobile .send-btn {
+  right: 8px;
+  top: 50%;
+  bottom: auto;
+  transform: translateY(-50%);
+  width: 34px;
+  height: 34px;
+}
 
-  .input-form.multiline .send-btn {
-    top: auto;
-    bottom: 7px;
-    transform: none;
-  }
+html.is-mobile .input-form.multiline .send-btn {
+  top: auto;
+  bottom: 7px;
+  transform: none;
+}
 
-  .send-btn:active:not(:disabled) {
-    transform: translateY(-50%) scale(0.98);
-  }
+html.is-mobile .send-btn:active:not(:disabled) {
+  transform: translateY(-50%) scale(0.98);
+}
 
-  .input-form.multiline .send-btn:active:not(:disabled) {
-    transform: scale(0.98);
-  }
+html.is-mobile .input-form.multiline .send-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
 
-  .input-disclaimer {
-    display: none;
-  }
+html.is-mobile .input-disclaimer {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 
-  #input {
-    min-width: 0;
-    width: 100%;
-    max-height: 120px;
-  }
+html.is-mobile #input {
+  min-width: 0;
+  width: 100%;
+  max-height: 120px;
+}
+
+/* ========== RTL (Arabic) ========== */
+[dir="rtl"] .chat-header-lang-dropdown {
+  right: auto;
+  left: 0;
+}
+
+[dir="rtl"] .chat-header-lang-option {
+  text-align: right;
+}
+
+[dir="rtl"] .message.user {
+  align-self: flex-start;
+  border-bottom-right-radius: 14px;
+  border-bottom-left-radius: 4px;
+}
+
+[dir="rtl"] .message.agent {
+  align-self: flex-end;
+  border-bottom-left-radius: 14px;
+  border-bottom-right-radius: 4px;
+}
+
+[dir="rtl"] .input-form {
+  padding: 0 14px 0 40px;
+}
+
+[dir="rtl"] .send-btn {
+  right: auto;
+  left: 10px;
+  padding: 0 2px 3px 0;
+}
+
+[dir="rtl"] .message-body ol,
+[dir="rtl"] .message-body ul {
+  padding-left: 0;
+  padding-right: 1.5em;
 }

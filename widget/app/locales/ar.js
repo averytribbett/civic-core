@@ -19,4 +19,6 @@
   tooltipWords: ["التصاريح", "الاجتماعات", "الخدمات", "الفعاليات"],
   languageLabel: "اللغة",
   messagesLabel: "رسائل الدردشة",
+  loadingResponse: "جارٍ تحميل الرد",
+  closeChat: "إغلاق الدردشة",
 };
