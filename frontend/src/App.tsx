@@ -5,14 +5,11 @@ import { HowItWorks } from './components/HowItWorks'
 import { Features } from './components/Features'
 import { PricingCTA } from './components/PricingCTA'
 import { Footer } from './components/Footer'
-import { loadWidgetScript } from './lib/widgetConfig'
 import { scrollToSection } from './lib/scrollToSection'
 import './App.css'
 
 function App() {
   useEffect(() => {
-    loadWidgetScript()
-
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {

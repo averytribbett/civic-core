@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { openWidget } from '../lib/openWidget';
+import { DEMO_BOOKING_URL } from '../lib/siteConfig';
 import { WIDGET_ACCENT } from '../lib/widgetConfig';
 import './HeroChatPreview.css';
 
@@ -399,9 +399,15 @@ export function HeroChatPreview() {
         <p className="hero-chat__note mono-label">
           <span className="mono-label--accent">&gt;&gt;&gt;</span> Live widget preview
         </p>
-        <button type="button" className="hero-chat__try mono-label" onClick={openWidget}>
-          Try it live ↗
-        </button>
+        <a
+          href={DEMO_BOOKING_URL || '#'}
+          className="hero-chat__try mono-label"
+          {...(DEMO_BOOKING_URL
+            ? { target: '_blank', rel: 'noopener noreferrer' }
+            : undefined)}
+        >
+          Book a demo ↗
+        </a>
       </div>
     </div>
   );

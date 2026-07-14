@@ -9,8 +9,8 @@ export function PricingCTA() {
           See it answer real questions
         </h2>
         <p className="cta-block__text">
-          Open the chat widget and ask about permits, meetings, or services —
-          it&apos;s trained on a live county site. Custom pricing for your
+          See how Civic Core answers questions about permits, meetings, and
+          services — trained on a live county site. Custom pricing for your
           municipality?{' '}
           <a href="mailto:hello@civiccore.ai?subject=Pricing%20inquiry">
             Get in touch

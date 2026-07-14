@@ -1,4 +1,4 @@
-import { openWidget } from '../lib/openWidget';
+import { DEMO_BOOKING_URL } from '../lib/siteConfig';
 
 type TryItButtonProps = {
   className?: string;
@@ -7,12 +7,14 @@ type TryItButtonProps = {
 
 export function TryItButton({ className = '', large = false }: TryItButtonProps) {
   return (
-    <button
-      type="button"
+    <a
+      href={DEMO_BOOKING_URL || '#'}
       className={`btn-primary ${large ? 'btn-primary--large' : ''} ${className}`.trim()}
-      onClick={openWidget}
+      {...(DEMO_BOOKING_URL
+        ? { target: '_blank', rel: 'noopener noreferrer' }
+        : undefined)}
     >
-      Try it now
-    </button>
+      Book a demo
+    </a>
   );
 }

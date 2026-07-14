@@ -1,4 +1,4 @@
-import { openWidget } from '../lib/openWidget';
+import { DEMO_BOOKING_URL } from '../lib/siteConfig';
 
 export function Footer() {
   return (
@@ -11,9 +11,15 @@ export function Footer() {
         <a href="mailto:hello@civiccore.ai" className="mono-label">
           hello@civiccore.ai
         </a>
-        <button type="button" className="site-footer__try mono-label" onClick={openWidget}>
-          Try it now ↗
-        </button>
+        <a
+          href={DEMO_BOOKING_URL || '#'}
+          className="site-footer__try mono-label"
+          {...(DEMO_BOOKING_URL
+            ? { target: '_blank', rel: 'noopener noreferrer' }
+            : undefined)}
+        >
+          Book a demo ↗
+        </a>
       </div>
     </footer>
   );
