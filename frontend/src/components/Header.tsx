@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { LogoMark } from './LogoMark';
 import { NavLink } from './NavLink';
 import { TryItButton } from './TryItButton';
 
@@ -17,19 +18,7 @@ export function Header() {
       role="banner"
     >
       <div className="site-header__brand">
-        <svg
-          className="site-header__logo"
-          width="28"
-          height="28"
-          viewBox="0 0 28 28"
-          fill="none"
-          aria-hidden="true"
-        >
-          <rect x="1" y="1" width="26" height="26" stroke="currentColor" strokeWidth="1" />
-          <line x1="7" y1="10" x2="21" y2="10" stroke="var(--accent)" strokeWidth="2" />
-          <line x1="7" y1="14" x2="21" y2="14" stroke="var(--accent)" strokeWidth="2" />
-          <line x1="7" y1="18" x2="17" y2="18" stroke="var(--accent)" strokeWidth="2" />
-        </svg>
+        <LogoMark className="site-header__logo" />
         <a href="#" className="site-header__name">
           Civic Core
         </a>
