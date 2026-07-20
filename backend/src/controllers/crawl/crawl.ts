@@ -1,8 +1,13 @@
 import { Request, Response } from "express"
 import { runCrawlSync } from "../../services/crawl-sync.service"
+import { createLogger } from "../../lib/logger"
 
 export const crawl = async (req: Request, res: Response) => {
   const startTime = Date.now()
+  const log = createLogger(
+    "crawl",
+    typeof req.body?.source === "string" ? req.body.source : undefined,
+  )
 
   try {
     const { url, source } = req.body
@@ -28,17 +33,6 @@ export const crawl = async (req: Request, res: Response) => {
     const totalTimeSeconds = (totalTimeMs / 1000).toFixed(2)
     const { durationMs: _durationMs, ...documents } = upsertResult
 
-    console.log("Crawl completed", {
-      totalTimeMs,
-      totalTimeSeconds: `${totalTimeSeconds}s`,
-      documents: {
-        created: documents.created,
-        updated: documents.updated,
-        deleted: documents.deleted,
-        skipped: documents.skipped,
-      },
-    })
-
     return res.status(200).json({
       success: true,
       message: "Crawl completed",
@@ -52,7 +46,7 @@ export const crawl = async (req: Request, res: Response) => {
     })
   } catch (error: unknown) {
     const err = error as Error
-    console.error("Error in crawl function:", err)
+    log.error(`error ${err.message}`)
     res.status(500).json({
       error: "Failed to process crawl request",
       message: err.message,

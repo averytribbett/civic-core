@@ -19,6 +19,7 @@
   tooltipWords: ["permits", "meetings", "services", "events"],
   languageLabel: "Language",
   messagesLabel: "Chat messages",
-  loadingResponse: "Loading response",
+  thinkingStatus: "Thinking",
+  searchingStatus: "Searching",
   closeChat: "Close chat",
 };

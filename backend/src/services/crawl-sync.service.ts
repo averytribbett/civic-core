@@ -1,10 +1,11 @@
-import { CheerioCrawler } from "crawlee"
+import { CheerioCrawler, log as crawleeLog, LogLevel } from "crawlee"
 import {
   DocumentService,
   type UpsertDocumentInput,
   type UpsertDocumentsResult,
 } from "./document.service"
 import { TextProcessingService } from "./text-processing.service"
+import { createLogger } from "../lib/logger"
 
 export type RunCrawlSyncInput = {
   url: string
@@ -130,17 +131,6 @@ export class CrawlIngestPipeline {
     this.totals.created += result.created
     this.totals.updated += result.updated
     this.totals.skipped += result.skipped
-    console.log(
-      JSON.stringify({
-        event: "crawl_pipeline_flush",
-        source: this.source,
-        batchSize: batch.length,
-        created: result.created,
-        updated: result.updated,
-        skipped: result.skipped,
-        runningTotal: this.totals,
-      }),
-    )
   }
 
   async finalize(): Promise<UpsertDocumentsResult> {
@@ -178,6 +168,11 @@ export async function runCrawlSync(
     PIPELINE_BATCH_SIZE,
     crawledPageUrls,
   )
+  const log = createLogger("crawl", source)
+  let pageFailures = 0
+
+  // Crawlee defaults to INFO (per-request noise). Keep warnings/errors only.
+  crawleeLog.setLevel(LogLevel.WARNING)
 
   const enqueueOptions = {
     transformRequestFunction(req: { url: string }) {
@@ -188,11 +183,9 @@ export async function runCrawlSync(
   }
 
   const crawler = new CheerioCrawler({
-    async requestHandler({ request, $, enqueueLinks, log, contentType }) {
+    async requestHandler({ request, $, enqueueLinks, contentType }) {
       const pageUrl = request.loadedUrl ?? request.url
       const normalized = normalizeUrl(pageUrl)
-
-      log.info(`Processing URL: ${normalized}`)
       const mimeType = contentType?.type ?? ""
 
       if (typeof $ !== "function") {
@@ -234,8 +227,11 @@ export async function runCrawlSync(
       await enqueueLinks(enqueueOptions)
     },
 
-    failedRequestHandler({ request, log }, error) {
-      log.error(`Failed: ${request.url}`, { error: error.message })
+    failedRequestHandler({ request }, error) {
+      pageFailures += 1
+      log.warn(
+        `page failed url=${request.url} error=${error instanceof Error ? error.message : String(error)}`,
+      )
     },
 
     additionalMimeTypes: [
@@ -282,6 +278,10 @@ export async function runCrawlSync(
 
   const upsertResult = await pipeline.finalize()
   const durationMs = Date.now() - startTime
+
+  log.info(
+    `done ms=${durationMs} pages=${crawledPageUrls.size} created=${upsertResult.created} updated=${upsertResult.updated} deleted=${upsertResult.deleted} skipped=${upsertResult.skipped} pageFailures=${pageFailures}`,
+  )
 
   return { ...upsertResult, durationMs }
 }

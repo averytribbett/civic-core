@@ -19,6 +19,7 @@
   tooltipWords: ["허가", "회의", "서비스", "행사"],
   languageLabel: "언어",
   messagesLabel: "채팅 메시지",
-  loadingResponse: "응답 로딩 중",
+  thinkingStatus: "생각 중",
+  searchingStatus: "검색 중",
   closeChat: "채팅 닫기",
 };

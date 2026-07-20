@@ -1,9 +1,14 @@
 import { Request, Response } from "express"
 import { prisma } from "../../lib/prisma"
+import { createLogger } from "../../lib/logger"
 
 const VALID_VOTES = ["up", "down"] as const
 
 export const voteMessage = async (req: Request, res: Response) => {
+  const bodySource =
+    typeof req.body?.source === "string" ? req.body.source : undefined
+  const log = createLogger("vote", bodySource)
+
   try {
     const rawId = req.params.messageId
     const messageId =
@@ -71,7 +76,7 @@ export const voteMessage = async (req: Request, res: Response) => {
     res.status(200).json({ ok: true, vote })
   } catch (error: unknown) {
     const err = error instanceof Error ? error : new Error(String(error))
-    console.error("Error in voteMessage:", err)
+    log.error(`error ${err.message}`)
     res.status(500).json({
       error: "Failed to record vote",
       message: "An error occurred. Please try again.",

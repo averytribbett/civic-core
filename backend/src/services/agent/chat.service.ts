@@ -1,24 +1,54 @@
-import { ChatOpenAI } from "@langchain/openai"
+import { ChatOpenAI, type ChatOpenAIFields } from "@langchain/openai"
 import { ChatAnthropic } from "@langchain/anthropic"
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai"
 import { BaseChatModel } from "@langchain/core/language_models/chat_models"
-import { StateGraph, END, START } from "@langchain/langgraph"
 import {
   BaseMessage,
   HumanMessage,
   AIMessage,
   SystemMessage,
   ToolMessage,
+  AIMessageChunk,
 } from "@langchain/core/messages"
 import { StructuredToolInterface } from "@langchain/core/tools"
-import { LLMProvider, ChatState } from "../../lib/types/chat.types"
+import { LLMProvider } from "../../lib/types/chat.types"
+import { createLogger, safeLogText } from "../../lib/logger"
 import { createSearchWebsiteDocumentsTool } from "./tools/search-website-documents"
 
 const MAX_HISTORY_LENGTH = 20
 const MAX_HISTORY_ITEM_LENGTH = 2000
+/** Max tool rounds (LLM decide → tools → LLM) before forcing an answer. */
+const MAX_TOOL_ROUNDS = 5
+
+type BoundLLM = Pick<BaseChatModel, "invoke"> & {
+  stream?: (
+    messages: BaseMessage[],
+  ) => AsyncIterable<AIMessageChunk> | Promise<AsyncIterable<AIMessageChunk>>
+}
+
+function messageContentToString(content: unknown): string {
+  if (typeof content === "string") return content
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === "string") return part
+        if (
+          part &&
+          typeof part === "object" &&
+          "text" in part &&
+          typeof (part as { text: unknown }).text === "string"
+        ) {
+          return (part as { text: string }).text
+        }
+        return ""
+      })
+      .join("")
+  }
+  return content == null ? "" : String(content)
+}
 
 export class ChatService {
-  private llm: Pick<BaseChatModel, "invoke">
+  private llm: BoundLLM
   private provider: LLMProvider
   private model?: string
   private readonly source: string
@@ -66,10 +96,13 @@ export class ChatService {
     this.llm = this.createLLM()
   }
 
-  private createLLM(): Pick<BaseChatModel, "invoke"> {
+  private createLLM(): BoundLLM {
     const model = this.model
     const temperature = parseFloat(process.env.LLM_TEMPERATURE || "0.7")
-    const maxTokens = parseInt(process.env.LLM_MAX_TOKENS || "1000")
+    const maxTokens = parseInt(process.env.LLM_MAX_TOKENS || "1000", 10)
+    const reasoningEffort = (
+      process.env.LLM_REASONING_EFFORT || "none"
+    ).toLowerCase()
 
     if (!model) {
       throw new Error(
@@ -79,13 +112,28 @@ export class ChatService {
 
     let llm: BaseChatModel
     switch (this.provider) {
-      case "openai":
-        llm = new ChatOpenAI({
-          modelName: model,
+      case "openai": {
+        const openaiOpts: ChatOpenAIFields = {
+          model,
           temperature,
-          maxTokens,
-        })
+          maxCompletionTokens: maxTokens,
+        }
+        if (
+          reasoningEffort &&
+          reasoningEffort !== "default" &&
+          ["none", "minimal", "low", "medium", "high", "xhigh"].includes(
+            reasoningEffort,
+          )
+        ) {
+          openaiOpts.reasoning = {
+            effort: reasoningEffort as NonNullable<
+              ChatOpenAIFields["reasoning"]
+            >["effort"],
+          }
+        }
+        llm = new ChatOpenAI(openaiOpts)
         break
+      }
 
       case "anthropic":
         llm = new ChatAnthropic({
@@ -108,149 +156,104 @@ export class ChatService {
     }
 
     const tools = [this.searchTool]
-    // `bindTools` is optional on `BaseChatModel` types, and returns a *new* runnable.
-    // Guard the call and keep the returned runnable so tool-calls actually work.
-    if (typeof (llm as any).bindTools === "function") {
-      return (llm as any).bindTools(tools)
+    if (
+      "bindTools" in llm &&
+      typeof (llm as BaseChatModel & { bindTools?: unknown }).bindTools ===
+        "function"
+    ) {
+      return (
+        llm as BaseChatModel & {
+          bindTools: (tools: StructuredToolInterface[]) => BoundLLM
+        }
+      ).bindTools(tools)
     }
-    return llm
+    return llm as BoundLLM
   }
 
-  /**
-   * Create a LangGraph workflow with tool support.
-   * @param systemPrompt - System prompt with current date (passed from chat() for correct "today").
-   */
-  private createChatGraph(systemPrompt: string) {
-    // Define the chat node - LLM decides whether to use tools
-    const chatNode = async (state: ChatState) => {
-      let messages = [...state.messages]
-
-      // Add system message at the beginning if not already present
-      const hasSystemMessage = messages.some(
-        (msg) => msg instanceof SystemMessage,
-      )
-      if (!hasSystemMessage && systemPrompt) {
-        messages = [new SystemMessage(systemPrompt), ...messages]
-      }
-
-      const response = await this.llm.invoke(messages)
-      return {
-        messages: [...state.messages, response],
-      }
+  private buildMessages(
+    message: string,
+    rawHistory?: unknown,
+  ): BaseMessage[] {
+    const history = this.parseHistory(rawHistory)
+    const messages: BaseMessage[] = []
+    if (this.systemPrompt) {
+      messages.push(new SystemMessage(this.systemPrompt))
     }
+    messages.push(...history)
+    messages.push(new HumanMessage(message))
+    return messages
+  }
 
-    // Define the tool node - executes tools when LLM requests them
-    const toolNode = async (state: ChatState) => {
-      const lastMessage = state.messages[state.messages.length - 1]
+  private async executeToolCalls(
+    aiMessage: AIMessage,
+  ): Promise<ToolMessage[]> {
+    const toolCalls = aiMessage.tool_calls || []
+    if (toolCalls.length === 0) return []
 
-      if (!(lastMessage instanceof AIMessage)) {
-        return { messages: [] }
-      }
+    const log = createLogger("tools", this.source)
+    const toolNames = toolCalls.map((c) => c.name || "unknown").join(", ")
+    log.info(`Executing ${toolCalls.length} tool call(s): ${toolNames}`)
 
-      // Get tool calls from the AI message
-      const toolCalls = lastMessage.tool_calls || []
+    return Promise.all(
+      toolCalls.map(async (toolCall) => {
+        const toolName = toolCall.name || ""
+        const toolInput = (toolCall.args || {}) as Record<string, unknown>
+        const toolCallId = toolCall.id || ""
 
-      if (toolCalls.length === 0) {
-        return { messages: [] }
-      }
-
-      const toolNames = toolCalls.map((c) => c.name || "unknown").join(", ")
-      console.log(
-        `[tools] Executing ${toolCalls.length} tool call(s): ${toolNames}`,
-      )
-
-      // Execute each tool call
-      const toolMessages = await Promise.all(
-        toolCalls.map(async (toolCall) => {
-          const toolName = toolCall.name || ""
-          const toolInput = (toolCall.args || {}) as Record<string, any>
-          const toolCallId = toolCall.id || ""
-
-          try {
-            const tools = [this.searchTool]
-            const tool = tools.find((t) => t.name === toolName)
-
-            if (!tool) {
-              console.warn(`[tools] Unknown tool requested: ${toolName}`)
-              return new ToolMessage({
-                content: `Tool ${toolName} not found`,
-                tool_call_id: toolCallId,
-              })
-            }
-
-            // Execute the tool with proper input validation
-            const validatedInput: { query: string; limit: number } = {
-              query: typeof toolInput.query === "string" ? toolInput.query : "",
-              limit: typeof toolInput.limit === "number" ? toolInput.limit : 5,
-            }
-            if (toolName === "search_website_documents") {
-              console.log(
-                `[tools] Invoking ${toolName} query="${validatedInput.query}"`,
-              )
-            } else {
-              console.log(`[tools] Invoking ${toolName}`, validatedInput)
-            }
-            const result = await tool.invoke(validatedInput)
-            console.log(`[tools] ${toolName} completed`)
-
+        try {
+          const tool = [this.searchTool].find((t) => t.name === toolName)
+          if (!tool) {
+            log.warn(`Unknown tool requested: ${toolName}`)
             return new ToolMessage({
-              content:
-                typeof result === "string" ? result : JSON.stringify(result),
-              tool_call_id: toolCallId,
-            })
-          } catch (error: any) {
-            console.error(`[tools] Error executing ${toolName}:`, error)
-            return new ToolMessage({
-              content: `Error executing tool: ${error.message || "Unknown error"}`,
+              content: `Tool ${toolName} not found`,
               tool_call_id: toolCallId,
             })
           }
-        }),
-      )
 
-      return {
-        messages: toolMessages,
-      }
+          const validatedInput = {
+            query: typeof toolInput.query === "string" ? toolInput.query : "",
+          }
+          const queryPreview = safeLogText(validatedInput.query, 200)
+          log.info(
+            queryPreview
+              ? `Invoking ${toolName} query=${JSON.stringify(queryPreview)}`
+              : `Invoking ${toolName}`,
+          )
+          const result = await tool.invoke(validatedInput)
+          log.info(`${toolName} completed`)
+
+          return new ToolMessage({
+            content:
+              typeof result === "string" ? result : JSON.stringify(result),
+            tool_call_id: toolCallId,
+          })
+        } catch (error: unknown) {
+          const err = error instanceof Error ? error : new Error(String(error))
+          log.error(`Error executing ${toolName}:`, err)
+          return new ToolMessage({
+            content: `Error executing tool: ${err.message || "Unknown error"}`,
+            tool_call_id: toolCallId,
+          })
+        }
+      }),
+    )
+  }
+
+  private usageFromMessage(msg: AIMessage | AIMessageChunk): {
+    inputTokens: number
+    outputTokens: number
+  } {
+    const u = msg.usage_metadata as
+      | { input_tokens?: number; output_tokens?: number }
+      | undefined
+    return {
+      inputTokens: u?.input_tokens ?? 0,
+      outputTokens: u?.output_tokens ?? 0,
     }
-
-    // Define conditional edge - check if we need to call tools
-    const shouldContinue = (state: ChatState) => {
-      const lastMessage = state.messages[state.messages.length - 1]
-
-      // If the last message has tool calls, we need to execute tools
-      if (
-        lastMessage instanceof AIMessage &&
-        lastMessage.tool_calls &&
-        lastMessage.tool_calls.length > 0
-      ) {
-        return "tools"
-      }
-
-      // Otherwise, we're done
-      return END
-    }
-
-    // Build the graph
-    const workflow = new StateGraph<ChatState>({
-      channels: {
-        messages: {
-          reducer: (x: BaseMessage[], y: BaseMessage[]) => x.concat(y),
-          default: () => [],
-        },
-      },
-    })
-      .addNode("chat", chatNode)
-      .addNode("tools", toolNode)
-      .addEdge(START, "chat")
-      .addConditionalEdges("chat", shouldContinue)
-      .addEdge("tools", "chat") // After tools, go back to chat
-
-    return workflow.compile()
   }
 
   /**
-   * Send a message and get a response with tool-based RAG support.
-   * Returns response text plus model and token usage for persistence.
+   * Non-streaming chat: LLM decides whether to call search_website_documents.
    */
   async chat(
     message: string,
@@ -262,70 +265,180 @@ export class ChatService {
     outputTokens: number | undefined
   }> {
     try {
-      // Build message history from raw request payload
-      const messages: BaseMessage[] = this.parseHistory(rawHistory)
-      messages.push(new HumanMessage(message))
+      const messages = this.buildMessages(message, rawHistory)
+      let inputTokens = 0
+      let outputTokens = 0
+      let response: AIMessage | null = null
 
-      // Create and run the graph (recursion limit to prevent runaway tool loops)
-      const graph = this.createChatGraph(this.systemPrompt)
-      const result = await graph.invoke(
-        { messages },
-        { recursionLimit: 10 },
-      )
+      for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+        response = (await this.llm.invoke(messages)) as AIMessage
+        const u = this.usageFromMessage(response)
+        inputTokens += u.inputTokens
+        outputTokens += u.outputTokens
 
-      // Extract the last AI message (should be the final response)
-      const resultMessages = (result as any).messages as BaseMessage[]
-
-      // Find the last AIMessage that doesn't have tool calls (final response)
-      let lastMessage: AIMessage | null = null
-      for (let i = resultMessages.length - 1; i >= 0; i--) {
-        const msg = resultMessages[i]
-        if (msg instanceof AIMessage) {
-          // If this message has no tool calls, it's the final response
-          if (!msg.tool_calls || msg.tool_calls.length === 0) {
-            lastMessage = msg
-            break
-          }
+        if (!response.tool_calls || response.tool_calls.length === 0) {
+          break
         }
+
+        const toolMessages = await this.executeToolCalls(response)
+        messages.push(response, ...toolMessages)
       }
 
-      // If we didn't find a final response, use the last AI message
-      if (!lastMessage) {
-        const lastAIMessage = resultMessages
-          .filter((msg) => msg instanceof AIMessage)
-          .pop() as AIMessage | undefined
-        if (lastAIMessage) {
-          lastMessage = lastAIMessage
-        }
-      }
-
-      if (!lastMessage) {
+      if (!response) {
         throw new Error("No AI response generated")
       }
 
-      // Aggregate token usage from all AI messages in this turn (multiple if tools were used)
-      let inputTokens = 0
-      let outputTokens = 0
-      for (const msg of resultMessages) {
-        if (msg instanceof AIMessage && msg.usage_metadata) {
-          const u = msg.usage_metadata as {
-            input_tokens?: number
-            output_tokens?: number
-          }
-          inputTokens += u.input_tokens ?? 0
-          outputTokens += u.output_tokens ?? 0
-        }
+      const text = messageContentToString(response.content)
+      if (!text) {
+        throw new Error("No AI response generated")
       }
 
       return {
-        response: lastMessage.content as string,
+        response: text,
         model: this.model,
         inputTokens: inputTokens > 0 ? inputTokens : undefined,
         outputTokens: outputTokens > 0 ? outputTokens : undefined,
       }
-    } catch (error: any) {
-      console.error("Error in chat service:", error)
-      throw new Error(`Chat service error: ${error.message}`)
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error))
+      createLogger("chat", this.source).error("Error in chat service:", err)
+      throw new Error(`Chat service error: ${err.message}`)
+    }
+  }
+
+  private async *streamOneTurn(
+    messages: BaseMessage[],
+    streamFn: (
+      messages: BaseMessage[],
+    ) => AsyncIterable<AIMessageChunk> | Promise<AsyncIterable<AIMessageChunk>>,
+  ): AsyncGenerator<
+    | { type: "token"; text: string }
+    | {
+        type: "turn"
+        assembled: string
+        aiMessage: AIMessage
+        inputTokens: number
+        outputTokens: number
+      }
+  > {
+    let assembled = ""
+    let gathered: AIMessageChunk | null = null
+    let inputTokens = 0
+    let outputTokens = 0
+    let sawToolCall = false
+
+    for await (const chunk of await streamFn(messages)) {
+      gathered = gathered ? gathered.concat(chunk) : chunk
+      if (chunk.tool_call_chunks?.length || chunk.tool_calls?.length) {
+        sawToolCall = true
+      }
+      const text = messageContentToString(chunk.content)
+      if (text) {
+        assembled += text
+        if (!sawToolCall) {
+          yield { type: "token", text }
+        }
+      }
+      const u = this.usageFromMessage(chunk)
+      inputTokens += u.inputTokens
+      outputTokens += u.outputTokens
+    }
+
+    const toolCalls = gathered?.tool_calls
+    const isToolTurn = !!(toolCalls && toolCalls.length > 0)
+
+    const aiMessage = new AIMessage({
+      content: gathered?.content ?? assembled,
+      tool_calls: toolCalls,
+      usage_metadata: gathered?.usage_metadata,
+    })
+
+    yield {
+      type: "turn",
+      assembled: isToolTurn ? "" : assembled,
+      aiMessage,
+      inputTokens,
+      outputTokens,
+    }
+  }
+
+  /**
+   * Streaming chat: tool rounds run without tokens; final answer turn is streamed.
+   */
+  async *chatStream(
+    message: string,
+    rawHistory?: unknown,
+  ): AsyncGenerator<
+    | { type: "token"; text: string }
+    | {
+        type: "complete"
+        response: string
+        model: string | undefined
+        inputTokens: number | undefined
+        outputTokens: number | undefined
+      }
+  > {
+    const messages = this.buildMessages(message, rawHistory)
+    let inputTokens = 0
+    let outputTokens = 0
+
+    const streamFn = this.llm.stream?.bind(this.llm)
+    if (!streamFn) {
+      const result = await this.chat(message, rawHistory)
+      if (result.response) {
+        yield { type: "token", text: result.response }
+      }
+      yield {
+        type: "complete",
+        response: result.response,
+        model: result.model,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+      }
+      return
+    }
+
+    let assembled = ""
+
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      let toolCallAi: AIMessage | null = null
+      assembled = ""
+
+      for await (const event of this.streamOneTurn(messages, streamFn)) {
+        if (event.type === "token") {
+          yield event
+        } else {
+          inputTokens += event.inputTokens
+          outputTokens += event.outputTokens
+          if (
+            event.aiMessage.tool_calls &&
+            event.aiMessage.tool_calls.length > 0
+          ) {
+            toolCallAi = event.aiMessage
+          } else {
+            assembled = event.assembled
+          }
+        }
+      }
+
+      if (!toolCallAi) {
+        break
+      }
+
+      const toolMessages = await this.executeToolCalls(toolCallAi)
+      messages.push(toolCallAi, ...toolMessages)
+    }
+
+    if (!assembled) {
+      throw new Error("No AI response generated")
+    }
+
+    yield {
+      type: "complete",
+      response: assembled,
+      model: this.model,
+      inputTokens: inputTokens > 0 ? inputTokens : undefined,
+      outputTokens: outputTokens > 0 ? outputTokens : undefined,
     }
   }
 }

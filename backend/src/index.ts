@@ -4,6 +4,9 @@ import cors from "cors"
 import helmet from "helmet"
 import rateLimit from "express-rate-limit"
 import { indexRouter } from "./routes"
+import { createLogger } from "./lib/logger"
+
+const listenLog = createLogger("listen")
 
 function listenPort(): number {
   const raw = process.env.PORT
@@ -12,7 +15,7 @@ function listenPort(): number {
   }
   const n = Number.parseInt(raw, 10)
   if (!Number.isFinite(n) || n <= 0 || n > 65535) {
-    console.error(`[listen] Invalid PORT=${JSON.stringify(raw)}, using 4000`)
+    listenLog.error(`Invalid PORT=${JSON.stringify(raw)}, using 4000`)
     return 4000
   }
   return n
@@ -47,7 +50,7 @@ app.use("/", indexRouter)
 
 const host = "0.0.0.0"
 app.listen(port, host, () => {
-  console.log(
-    `[listen] Server is listening on http://${host}:${port} (PORT env=${JSON.stringify(process.env.PORT)})`,
+  listenLog.info(
+    `Server is listening on http://${host}:${port} (PORT env=${JSON.stringify(process.env.PORT)})`,
   )
 })

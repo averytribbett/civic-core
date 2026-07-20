@@ -19,6 +19,7 @@
   tooltipWords: ["licenças", "reuniões", "serviços", "eventos"],
   languageLabel: "Idioma",
   messagesLabel: "Mensagens do chat",
-  loadingResponse: "Carregando resposta",
+  thinkingStatus: "Pensando",
+  searchingStatus: "Buscando",
   closeChat: "Fechar chat",
 };

@@ -1,6 +1,7 @@
 import "dotenv/config"
 import { prisma } from "../lib/prisma"
 import { runCrawlSync } from "../services/crawl-sync.service"
+import { logger } from "../lib/logger"
 
 type CrawlLogPayload = {
   event: "crawl_sync_jurisdiction"
@@ -15,7 +16,7 @@ type CrawlLogPayload = {
 }
 
 function logStructured(payload: CrawlLogPayload): void {
-  console.log(JSON.stringify(payload))
+  logger.json("info", payload)
 }
 
 function resolveSourceFilter(argv: string[]): string | undefined {
@@ -78,49 +79,41 @@ async function main(): Promise<void> {
   })
 
   if (jurisdictions.length === 0) {
-    console.log(
-      JSON.stringify({
-        event: "crawl_sync_complete",
-        status: "no_op",
-        message: sourceFilter
-          ? `No enabled jurisdiction with crawlUrl for source=${sourceFilter}`
-          : "No enabled jurisdictions with crawlUrl",
-      }),
-    )
+    logger.json("info", {
+      event: "crawl_sync_complete",
+      status: "no_op",
+      message: sourceFilter
+        ? `No enabled jurisdiction with crawlUrl for source=${sourceFilter}`
+        : "No enabled jurisdictions with crawlUrl",
+    })
     return
   }
 
   // Production: one Cloud Run Job execution per jurisdiction (CRAWL_SOURCE set).
   if (!sourceFilter && jurisdictions.length > 1) {
-    console.log(
-      JSON.stringify({
-        event: "crawl_sync_warn",
-        message:
-          "CRAWL_SOURCE is unset; running all enabled jurisdictions sequentially. For production, use one job execution per source (parallel schedulers).",
-        sources: jurisdictions.map((j) => j.source),
-      }),
-    )
+    logger.json("info", {
+      event: "crawl_sync_warn",
+      message:
+        "CRAWL_SOURCE is unset; running all enabled jurisdictions sequentially. For production, use one job execution per source (parallel schedulers).",
+      sources: jurisdictions.map((j) => j.source),
+    })
   }
 
   if (sourceFilter && jurisdictions.length > 1) {
-    console.warn(
-      JSON.stringify({
-        event: "crawl_sync_warn",
-        message: `Multiple rows matched source=${sourceFilter}; syncing first only`,
-      }),
-    )
+    logger.json("warn", {
+      event: "crawl_sync_warn",
+      message: `Multiple rows matched source=${sourceFilter}; syncing first only`,
+    })
   }
 
   const toRun = sourceFilter ? jurisdictions.slice(0, 1) : jurisdictions
 
-  console.log(
-    JSON.stringify({
-      event: "crawl_sync_start",
-      count: toRun.length,
-      sources: toRun.map((j) => j.source),
-      mode: sourceFilter ? "single" : "sequential_all",
-    }),
-  )
+  logger.json("info", {
+    event: "crawl_sync_start",
+    count: toRun.length,
+    sources: toRun.map((j) => j.source),
+    mode: sourceFilter ? "single" : "sequential_all",
+  })
 
   const failures: string[] = []
 
@@ -151,14 +144,12 @@ async function main(): Promise<void> {
     }
   }
 
-  console.log(
-    JSON.stringify({
-      event: "crawl_sync_complete",
-      status: failures.length === 0 ? "success" : "partial_failure",
-      total: toRun.length,
-      failed: failures,
-    }),
-  )
+  logger.json("info", {
+    event: "crawl_sync_complete",
+    status: failures.length === 0 ? "success" : "partial_failure",
+    total: toRun.length,
+    failed: failures,
+  })
 
   if (failures.length > 0) {
     process.exitCode = 1
@@ -168,14 +159,12 @@ async function main(): Promise<void> {
 main()
   .catch((error: unknown) => {
     const err = error as Error
-    console.error(
-      JSON.stringify({
-        event: "crawl_sync_fatal",
-        status: "error",
-        error: err.message,
-        stack: err.stack,
-      }),
-    )
+    logger.json("error", {
+      event: "crawl_sync_fatal",
+      status: "error",
+      error: err.message,
+      stack: err.stack,
+    })
     process.exitCode = 1
   })
   .finally(async () => {

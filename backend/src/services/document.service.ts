@@ -4,6 +4,7 @@ import pgvector from "pgvector"
 import { randomUUID } from "node:crypto"
 import { mapPool } from "../lib/concurrency"
 import { prisma } from "../lib/prisma"
+import { logger } from "../lib/logger"
 import { DocumentHashService } from "./document-hash.service"
 import { EmbeddingService } from "./embedding.service"
 import type { HtmlSegment } from "./text-processing.service"
@@ -167,7 +168,7 @@ export class DocumentService {
         },
       }))
     } catch (error: any) {
-      console.error("Error searching similar chunks:", error)
+      logger.error("Error searching similar chunks:", error)
       throw new Error(`Failed to search similar chunks: ${error.message}`)
     }
   }
@@ -451,7 +452,7 @@ export class DocumentService {
         flatEmbeddings = await this.embedTextsInParallel(flatTexts)
       } catch (err: unknown) {
         if (!this.isEmbeddingTokenLimitError(err)) throw err
-        console.warn("Batch embedding hit token limit; retrying per document")
+        logger.warn("Batch embedding hit token limit; retrying per document")
         return this.buildDocsWithEmbeddingsSequential(docs, mode)
       }
     }
@@ -512,7 +513,6 @@ export class DocumentService {
         })
       } catch (err: unknown) {
         if (this.isEmbeddingTokenLimitError(err)) {
-          console.warn(`Page skipped (embedding token limit): ${doc.url}`)
           continue
         }
         throw err

@@ -19,6 +19,7 @@
   tooltipWords: ["许可证", "会议", "服务", "活动"],
   languageLabel: "语言",
   messagesLabel: "聊天消息",
-  loadingResponse: "正在加载回复",
+  thinkingStatus: "思考中",
+  searchingStatus: "搜索中",
   closeChat: "关闭聊天",
 };
