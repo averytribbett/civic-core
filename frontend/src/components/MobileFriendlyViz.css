@@ -1,0 +1,330 @@
+/* iPhone frame + keyboard for the mobile-friendly feature viz */
+
+.mobile-friendly-viz {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.iphone {
+  width: min(100%, 220px);
+  filter: drop-shadow(0 14px 28px rgba(15, 23, 42, 0.16));
+}
+
+.iphone__frame {
+  position: relative;
+  border-radius: 30px;
+  padding: 8px;
+  background: linear-gradient(160deg, #2a2e35 0%, #111318 55%, #0a0b0d 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.iphone__island {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  z-index: 3;
+  width: 62px;
+  height: 18px;
+  transform: translateX(-50%);
+  border-radius: 10px;
+  background: #0a0b0d;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.iphone__screen {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 400px;
+  overflow: hidden;
+  border-radius: 24px;
+  background: #f8fafc;
+  color: #1e293b;
+  font-family: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+}
+
+.iphone__status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  padding: 10px 14px 2px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+}
+
+.iphone__status-icons {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.iphone__signal {
+  width: 14px;
+  height: 9px;
+  background:
+    linear-gradient(to top, #0f172a 0 2px, transparent 2px) 0 7px / 2.5px 2px no-repeat,
+    linear-gradient(to top, #0f172a 0 4px, transparent 4px) 3.5px 5px / 2.5px 4px no-repeat,
+    linear-gradient(to top, #0f172a 0 6px, transparent 6px) 7px 3px / 2.5px 6px no-repeat,
+    linear-gradient(to top, #0f172a 0 8px, transparent 8px) 10.5px 1px / 2.5px 8px no-repeat;
+}
+
+.iphone__battery {
+  width: 18px;
+  height: 9px;
+  border: 1.5px solid #0f172a;
+  border-radius: 2px;
+  position: relative;
+}
+
+.iphone__battery::before {
+  content: '';
+  position: absolute;
+  inset: 1.5px;
+  background: #0f172a;
+  border-radius: 0.5px;
+}
+
+.iphone__battery::after {
+  content: '';
+  position: absolute;
+  right: -3px;
+  top: 2px;
+  width: 1.5px;
+  height: 4px;
+  border-radius: 0 1px 1px 0;
+  background: #0f172a;
+}
+
+.iphone__chat.hero-widget-preview {
+  flex: 1;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  pointer-events: none;
+  user-select: none;
+}
+
+.iphone__chat .messages {
+  min-height: 0;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 8px 10px 6px;
+  gap: 8px;
+  justify-content: flex-end;
+  scrollbar-width: none;
+}
+
+.iphone__chat .messages::-webkit-scrollbar {
+  display: none;
+}
+
+.iphone__chat .message {
+  max-width: 88%;
+  padding: 6px 9px;
+  font-size: 11px;
+  border-radius: 10px;
+  line-height: 1.35;
+}
+
+.iphone__chat .message-source {
+  font-size: 10px;
+}
+
+.iphone__chat .message-actions {
+  margin-top: 6px;
+  padding-top: 6px;
+}
+
+.iphone__chat .vote-btn {
+  width: 22px;
+  height: 22px;
+}
+
+.iphone__chat .chat-status {
+  font-size: 0.75rem;
+  margin: 2px 2px 4px;
+}
+
+.iphone__composer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 5px 8px 6px;
+  background: #f1f5f9;
+  border-top: 1px solid #e2e8f0;
+}
+
+.iphone__input {
+  flex: 1;
+  min-height: 26px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 4px 10px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  font-size: 11px;
+  line-height: 1.3;
+  color: #0f172a;
+  word-break: break-word;
+}
+
+.iphone__placeholder {
+  color: #94a3b8;
+}
+
+.iphone__caret {
+  display: inline-block;
+  width: 1.5px;
+  height: 0.95em;
+  margin-left: 1px;
+  background: var(--chat-primary, #f0801a);
+  vertical-align: text-bottom;
+  animation: iphone-caret-blink 1s step-end infinite;
+}
+
+.iphone__send {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #cbd5e1;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  transition: background-color 0.2s ease;
+}
+
+.iphone__send--ready {
+  background: var(--chat-primary, #f0801a);
+}
+
+.iphone-keyboard {
+  flex-shrink: 0;
+  padding: 4px 3px 12px;
+  background: linear-gradient(180deg, #d4d7de 0%, #c8ccd4 100%);
+  border-top: 1px solid #b8bcc6;
+}
+
+.iphone__home {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  z-index: 2;
+  width: 72px;
+  height: 3px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.iphone-keyboard__row {
+  display: flex;
+  justify-content: center;
+  gap: 3px;
+  margin-bottom: 4px;
+}
+
+.iphone-keyboard__row:last-child {
+  margin-bottom: 0;
+}
+
+.iphone-keyboard__key {
+  display: grid;
+  place-items: center;
+  min-width: 17px;
+  height: 24px;
+  padding: 0 1px;
+  border-radius: 4px;
+  background: #fff;
+  color: #111827;
+  font-size: 10px;
+  font-weight: 500;
+  font-family: system-ui, -apple-system, sans-serif;
+  box-shadow: 0 1px 0 #8e939d;
+  text-transform: none;
+  transition:
+    background-color 0.08s ease,
+    color 0.08s ease,
+    transform 0.08s ease;
+}
+
+.iphone-keyboard__key--shift,
+.iphone-keyboard__key--delete,
+.iphone-keyboard__key--123,
+.iphone-keyboard__key--return {
+  min-width: 26px;
+  background: #abb0ba;
+  font-size: 8px;
+  font-weight: 600;
+  text-transform: lowercase;
+}
+
+.iphone-keyboard__key--space {
+  flex: 1;
+  max-width: 110px;
+  font-size: 9px;
+  color: #475569;
+}
+
+.iphone-keyboard__key--return {
+  min-width: 38px;
+}
+
+.iphone-keyboard__key--active {
+  background: #9ca3af;
+  color: #fff;
+  transform: translateY(1px);
+  box-shadow: none;
+}
+
+.iphone-keyboard__key--return.iphone-keyboard__key--active,
+.iphone-keyboard__key--shift.iphone-keyboard__key--active,
+.iphone-keyboard__key--delete.iphone-keyboard__key--active {
+  background: #6b7280;
+}
+
+@keyframes iphone-caret-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .iphone__caret {
+    animation: none;
+  }
+
+  .iphone-keyboard__key {
+    transition: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .iphone {
+    width: min(100%, 200px);
+  }
+
+  .iphone__screen {
+    height: 370px;
+  }
+}

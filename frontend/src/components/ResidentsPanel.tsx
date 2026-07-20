@@ -35,7 +35,7 @@ export function ResidentsPanel() {
         </h3>
         <p className="residents-panel__desc">
           The widget detects each visitor&apos;s language automatically and lets
-          them switch anytime in chat. Nine languages and counting — so more of
+          them switch anytime in chat. Multiple languages are supported — so more of
           your community can get answers in the language they&apos;re most
           comfortable with.
         </p>

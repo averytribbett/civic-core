@@ -1,136 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
+import {
+  buildDemoConversations,
+  type Conversation,
+} from '../lib/demoConversations';
 import { DEMO_BOOKING_URL } from '../lib/siteConfig';
+import { chunkTextForStream } from '../lib/streamChunks';
 import { WIDGET_ACCENT } from '../lib/widgetConfig';
 import './HeroChatPreview.css';
-
-const SPRINGFIELD = 'springfield.gov';
-
-type Turn =
-  | { role: 'user'; text: string }
-  | { role: 'agent'; text: string; source?: string };
-
-type Conversation = {
-  turns: Turn[];
-};
 
 type VisibleMessage = {
   id: string;
   role: 'user' | 'agent';
   text: string;
   source?: string;
+  streaming?: boolean;
 };
 
-function getNextWeekday(day: number): Date {
-  const result = new Date();
-  result.setHours(0, 0, 0, 0);
-  const daysUntil = (day - result.getDay() + 7) % 7 || 7;
-  result.setDate(result.getDate() + daysUntil);
-  return result;
-}
-
-function getLastWeekday(day: number): Date {
-  const result = new Date();
-  result.setHours(0, 0, 0, 0);
-  const daysSince = (result.getDay() - day + 7) % 7 || 7;
-  result.setDate(result.getDate() - daysSince);
-  return result;
-}
-
-function formatLongDate(date: Date): string {
-  return new Intl.DateTimeFormat(undefined, {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-  }).format(date);
-}
-
-function getNextTaxDueDate(): Date {
-  const now = new Date();
-  let year = now.getFullYear();
-  let due = new Date(year, 10, 15);
-  if (due <= now) {
-    due = new Date(year + 1, 10, 15);
-  }
-  return due;
-}
-
-function buildConversations(): Conversation[] {
-  const nextCouncil = getNextWeekday(3);
-  const lastCouncil = getLastWeekday(3);
-  const taxDue = getNextTaxDueDate();
-  const nextCouncilLabel = formatLongDate(nextCouncil);
-  const lastCouncilLabel = formatLongDate(lastCouncil);
-  const taxDueLabel = formatLongDate(taxDue);
-
-  return [
-    {
-      turns: [
-        {
-          role: 'user',
-          text: 'When is the next city council meeting?',
-        },
-        {
-          role: 'agent',
-          text: `The next City Council meeting is ${nextCouncilLabel} at 7:00 PM in Council Chambers, 123 Main Street.`,
-          source: `${SPRINGFIELD}/council/meetings`,
-        },
-        {
-          role: 'user',
-          text: 'Can I read the minutes from the last meeting?',
-        },
-        {
-          role: 'agent',
-          text: `Yes — approved minutes from the ${lastCouncilLabel} meeting are posted on the city website.`,
-          source: `${SPRINGFIELD}/council/minutes`,
-        },
-      ],
-    },
-    {
-      turns: [
-        {
-          role: 'user',
-          text: 'How do I apply for a building permit?',
-        },
-        {
-          role: 'agent',
-          text: 'You can submit a permit application online or in person at the Planning Department. Most residential projects are reviewed within 10 business days.',
-          source: `${SPRINGFIELD}/permits/building`,
-        },
-        {
-          role: 'user',
-          text: 'Do I need plans for a deck?',
-        },
-        {
-          role: 'agent',
-          text: 'Yes — structural plans are required for any deck over 30 inches above grade. You can upload them with your online application.',
-          source: `${SPRINGFIELD}/permits/deck-requirements`,
-        },
-      ],
-    },
-    {
-      turns: [
-        {
-          role: 'user',
-          text: 'When is the deadline to pay property taxes?',
-        },
-        {
-          role: 'agent',
-          text: `The next property tax installment is due ${taxDueLabel}. You can pay online, by mail, or in person at the Treasurer's office.`,
-          source: `${SPRINGFIELD}/treasurer/property-tax`,
-        },
-        {
-          role: 'user',
-          text: 'Is there a late fee if I miss the deadline?',
-        },
-        {
-          role: 'agent',
-          text: 'A 2% penalty applies after the due date, with additional interest accruing each month until the balance is paid.',
-          source: `${SPRINGFIELD}/treasurer/penalties`,
-        },
-      ],
-    },
-  ];
-}
+type StatusPhase = 'thinking' | 'searching' | null;
 
 const THUMBS_UP_ICON = (
   <svg
@@ -160,6 +46,17 @@ function VoteActions() {
   );
 }
 
+function ChatStatus({ phase }: { phase: 'thinking' | 'searching' }) {
+  return (
+    <div className="chat-status" role="status" aria-live="polite">
+      <span className="chat-status-label">
+        {phase === 'thinking' ? 'Thinking' : 'Searching'}
+      </span>
+      <span className="chat-status-ellipsis" aria-hidden="true" />
+    </div>
+  );
+}
+
 const widgetTheme = {
   '--chat-primary': WIDGET_ACCENT,
   '--chat-primary-hover': '#d96f10',
@@ -168,11 +65,12 @@ const widgetTheme = {
 
 const USER_DELAY = 850;
 const FOLLOW_UP_USER_DELAY = 1600;
-const LOADING_DELAY = 1200;
+const STATUS_SEARCH_DELAY_MS = 1100;
+const PRE_STREAM_DELAY = 550;
+const TOKEN_DELAY_MS = 28;
 const AGENT_DELAY = 950;
 const END_PAUSE = 3000;
 const FADE_DELAY = 520;
-const MESSAGE_EXIT_MS = 420;
 
 function prefersReducedMotion() {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -221,44 +119,17 @@ function AnimatedMessage({
   );
 }
 
-function AnimatedLoading({ exiting }: { exiting: boolean }) {
-  const ref = useMessageEnter();
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || !exiting || prefersReducedMotion()) return;
-
-    el.classList.remove('message--visible');
-    el.classList.add('message--exit');
-  }, [exiting, ref]);
-
-  return (
-    <div
-      ref={ref}
-      className="message agent loading-indicator"
-      aria-hidden="true"
-    >
-      <span />
-      <span />
-      <span />
-    </div>
-  );
-}
-
 export function HeroChatPreview() {
-  const conversations = useRef(buildConversations());
+  const conversations = useRef(buildDemoConversations());
   const [messages, setMessages] = useState<VisibleMessage[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [loadingExiting, setLoadingExiting] = useState(false);
+  const [status, setStatus] = useState<StatusPhase>(null);
   const [fading, setFading] = useState(false);
   const runId = useRef(0);
 
   useEffect(() => {
-    const prefersReducedMotion = window.matchMedia(
-      '(prefers-reduced-motion: reduce)'
-    ).matches;
+    const reduced = prefersReducedMotion();
 
-    if (prefersReducedMotion) {
+    if (reduced) {
       const conv = conversations.current[0];
       setMessages(
         conv.turns.map((turn, i) => ({
@@ -284,18 +155,59 @@ export function HeroChatPreview() {
     const currentRun = ++runId.current;
     const isActive = () => currentRun === runId.current;
 
+    const streamAgentReply = async (
+      convIndex: number,
+      turnIndex: number,
+      text: string,
+      source?: string
+    ) => {
+      setStatus('thinking');
+      await wait(STATUS_SEARCH_DELAY_MS);
+      if (!isActive()) return;
+
+      setStatus('searching');
+      await wait(PRE_STREAM_DELAY);
+      if (!isActive()) return;
+
+      setStatus(null);
+      const id = `${convIndex}-a-${turnIndex}`;
+      setMessages((prev) => [
+        ...prev,
+        { id, role: 'agent', text: '', streaming: true },
+      ]);
+
+      const chunks = chunkTextForStream(text);
+      let accumulated = '';
+      for (const chunk of chunks) {
+        if (!isActive()) return;
+        accumulated += chunk;
+        const next = accumulated;
+        setMessages((prev) =>
+          prev.map((m) => (m.id === id ? { ...m, text: next } : m))
+        );
+        await wait(TOKEN_DELAY_MS);
+      }
+
+      if (!isActive()) return;
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === id ? { ...m, text, source, streaming: false } : m
+        )
+      );
+      await wait(AGENT_DELAY);
+    };
+
     const playConversation = async (convIndex: number) => {
       if (!isActive()) return;
 
       setFading(false);
       setMessages([]);
-      setLoading(false);
-      setLoadingExiting(false);
+      setStatus(null);
 
       await wait(400);
       if (!isActive()) return;
 
-      const conv = conversations.current[convIndex];
+      const conv: Conversation = conversations.current[convIndex];
 
       for (let i = 0; i < conv.turns.length; i++) {
         const turn = conv.turns[i];
@@ -316,25 +228,7 @@ export function HeroChatPreview() {
           ]);
           await wait(USER_DELAY);
         } else {
-          setLoadingExiting(false);
-          setLoading(true);
-          await wait(LOADING_DELAY);
-          if (!isActive()) return;
-          setLoadingExiting(true);
-          await wait(MESSAGE_EXIT_MS);
-          if (!isActive()) return;
-          setLoading(false);
-          setLoadingExiting(false);
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: `${convIndex}-a-${i}`,
-              role: 'agent',
-              text: turn.text,
-              source: turn.source,
-            },
-          ]);
-          await wait(AGENT_DELAY);
+          await streamAgentReply(convIndex, i, turn.text, turn.source);
         }
       }
 
@@ -370,16 +264,20 @@ export function HeroChatPreview() {
           aria-live="polite"
         >
           {messages.map((msg) => (
-            <AnimatedMessage key={msg.id} role={msg.role}>
+            <AnimatedMessage
+              key={msg.id}
+              role={msg.role}
+              className={msg.streaming ? 'message--streaming' : ''}
+            >
               {msg.role === 'agent' ? (
                 <>
                   <div className="message-body">
                     <p>{msg.text}</p>
-                    {msg.source && (
+                    {!msg.streaming && msg.source && (
                       <p className="message-source">{msg.source}</p>
                     )}
                   </div>
-                  <VoteActions />
+                  {!msg.streaming && <VoteActions />}
                 </>
               ) : (
                 <div className="message-body">
@@ -389,9 +287,7 @@ export function HeroChatPreview() {
             </AnimatedMessage>
           ))}
 
-          {loading && (
-            <AnimatedLoading exiting={loadingExiting} />
-          )}
+          {status && <ChatStatus phase={status} />}
         </div>
       </div>
 

@@ -387,6 +387,7 @@
   background: var(--bg);
   display: flex;
   align-items: center;
+  justify-content: center;
   min-height: 220px;
 }
 
