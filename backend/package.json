@@ -24,7 +24,9 @@
     "lint:fix": "eslint src prisma.config.ts --fix",
     "format": "prettier --write \"src/**/*.ts\" \"prisma.config.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"prisma.config.ts\"",
-    "lint": "yarn lint:fix && yarn format"
+    "lint": "yarn lint:fix && yarn format",
+    "test": "node -r ts-node/register/transpile-only --test test/**/*.test.ts",
+    "eval:rag-relevance": "ts-node --transpile-only src/eval/rag-relevance/run.ts"
   },
   "keywords": [],
   "author": "",

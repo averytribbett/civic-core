@@ -1,4 +1,8 @@
 import { PrismaClient } from "../generated/prisma/client"
+import {
+  classifyDocumentKind,
+  type DocumentKind,
+} from "../lib/document-kind"
 import { IngestChunk } from "../lib/types/document.types"
 import pgvector from "pgvector"
 import { randomUUID } from "node:crypto"
@@ -33,7 +37,25 @@ export type UpsertDocumentInput = {
     text: string
     title?: string | null
     segments?: HtmlSegment[]
+    mimeType?: string | null
+    docKind?: DocumentKind | null
   }[]
+}
+
+export type SimilarChunkResult = {
+  id: string
+  chunkIndex: number
+  content: string
+  heading: string | null
+  similarity: number
+  document: {
+    id: string
+    url: string
+    title: string | null
+    source: string | null
+    mimeType: string | null
+    docKind: DocumentKind | null
+  }
 }
 
 export type UpsertDocumentsResult = {
@@ -90,21 +112,7 @@ export class DocumentService {
     limit: number = 5,
     similarityThreshold: number = 0.5,
     source?: string,
-  ): Promise<
-    Array<{
-      id: string
-      chunkIndex: number
-      content: string
-      heading: string | null
-      similarity: number
-      document: {
-        id: string
-        url: string
-        title: string | null
-        source: string | null
-      }
-    }>
-  > {
+  ): Promise<SimilarChunkResult[]> {
     try {
       // Convert embedding array to pgvector SQL format
       // pgvector.toSql() returns '[1,2,3]' format
@@ -122,7 +130,9 @@ export class DocumentService {
           d.id as "documentId",
           d.url as "documentUrl",
           d.title as "documentTitle",
-          d.source as "documentSource"
+          d.source as "documentSource",
+          d."mimeType" as "documentMimeType",
+          d."docKind" as "documentDocKind"
         FROM "chunks" c
         INNER JOIN "documents" d ON c."documentId" = d.id
         WHERE 1 - (c.embedding <=> $1::vector) >= $2
@@ -151,6 +161,8 @@ export class DocumentService {
           documentUrl: string
           documentTitle: string | null
           documentSource: string | null
+          documentMimeType: string | null
+          documentDocKind: DocumentKind | null
         }>
       >(query, ...params)
 
@@ -165,6 +177,8 @@ export class DocumentService {
           url: row.documentUrl,
           title: row.documentTitle,
           source: row.documentSource,
+          mimeType: row.documentMimeType,
+          docKind: row.documentDocKind,
         },
       }))
     } catch (error: any) {
@@ -180,21 +194,7 @@ export class DocumentService {
   async getChunksByDocumentAndIndices(
     pairs: Array<{ documentId: string; chunkIndex: number }>,
     source?: string,
-  ): Promise<
-    Array<{
-      id: string
-      chunkIndex: number
-      content: string
-      heading: string | null
-      similarity: number
-      document: {
-        id: string
-        url: string
-        title: string | null
-        source: string | null
-      }
-    }>
-  > {
+  ): Promise<SimilarChunkResult[]> {
     if (pairs.length === 0) return []
     const seen = new Set<string>()
     const uniquePairs = pairs.filter((p) => {
@@ -225,6 +225,8 @@ export class DocumentService {
         url: c.document.url,
         title: c.document.title,
         source: c.document.source,
+        mimeType: c.document.mimeType,
+        docKind: c.document.docKind as DocumentKind | null,
       },
     }))
   }
@@ -262,17 +264,21 @@ export class DocumentService {
 
     const documentsToCreate: CrawlDocument[] = []
     const documentsToUpdate: CrawlDocument[] = []
+    const metadataOnlyUpdates: CrawlDocument[] = []
 
     for (const doc of documents) {
       const hash = this.documentHashService.makeDocumentHash({
         url: doc.url,
         text: doc.text,
       })
+      const enriched = this.enrichDocumentMeta(doc)
       const existing = existingByUrl.get(doc.url)
       if (!existing) {
-        documentsToCreate.push(doc)
+        documentsToCreate.push(enriched)
       } else if (existing.hash !== hash) {
-        documentsToUpdate.push(doc)
+        documentsToUpdate.push(enriched)
+      } else {
+        metadataOnlyUpdates.push(enriched)
       }
     }
 
@@ -298,6 +304,8 @@ export class DocumentService {
             source: this.sanitizeTextForDb(input.source) ?? input.source,
             title: this.sanitizeTextForDb(doc.title ?? null),
             hash: this.sanitizeTextForDb(hash) ?? hash,
+            mimeType: this.sanitizeTextForDb(doc.mimeType ?? null),
+            docKind: doc.docKind ?? null,
           },
         })
         if (ingestChunks.length > 0) {
@@ -314,6 +322,8 @@ export class DocumentService {
           data: {
             hash: this.sanitizeTextForDb(hash) ?? hash,
             title: this.sanitizeTextForDb(doc.title ?? null),
+            mimeType: this.sanitizeTextForDb(doc.mimeType ?? null),
+            docKind: doc.docKind ?? null,
           },
         })
         if (ingestChunks.length > 0) {
@@ -321,9 +331,34 @@ export class DocumentService {
         }
         existingByUrl.set(doc.url, { id: existing.id, hash })
       }
+
+      for (const doc of metadataOnlyUpdates) {
+        const existing = existingByUrl.get(doc.url)!
+        await tx.document.update({
+          where: { id: existing.id },
+          data: {
+            title: this.sanitizeTextForDb(doc.title ?? null),
+            mimeType: this.sanitizeTextForDb(doc.mimeType ?? null),
+            docKind: doc.docKind ?? null,
+          },
+        })
+      }
     })
 
     return counts
+  }
+
+  /** Ensure mimeType/docKind are set from crawl input or URL/title heuristics. */
+  private enrichDocumentMeta(doc: CrawlDocument): CrawlDocument {
+    const mimeType = doc.mimeType ?? null
+    const docKind =
+      doc.docKind ??
+      classifyDocumentKind({
+        url: doc.url,
+        title: doc.title,
+        mimeType,
+      })
+    return { ...doc, mimeType, docKind }
   }
 
   /** Remove documents for `source` whose URLs were not seen in the completed crawl. */

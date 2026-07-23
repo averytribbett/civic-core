@@ -1,4 +1,5 @@
 import { CheerioCrawler, log as crawleeLog, LogLevel } from "crawlee"
+import { classifyDocumentKind } from "../lib/document-kind"
 import {
   DocumentService,
   type UpsertDocumentInput,
@@ -45,6 +46,23 @@ function parseAllowedHostname(seedUrl: string): string {
 }
 
 type CrawlPageDocument = UpsertDocumentInput["documents"][number]
+
+function pageDocumentMeta(
+  url: string,
+  title: string | null | undefined,
+  mimeType: string,
+): Pick<CrawlPageDocument, "mimeType" | "docKind"> {
+  const normalizedMime = mimeType || null
+  return {
+    mimeType: normalizedMime,
+    docKind: classifyDocumentKind({
+      url,
+      title,
+      mimeType: normalizedMime,
+    }),
+  }
+}
+
 type CrawlIngestDocumentService = Pick<
   DocumentService,
   "upsertDocumentsBatch" | "deleteStaleDocuments"
@@ -191,7 +209,12 @@ export async function runCrawlSync(
       if (typeof $ !== "function") {
         if (mimeType.includes("pdf")) {
           const text = await textProcessingService.extractPdfText(normalized)
-          await pipeline.push({ url: normalized, text, title: null })
+          await pipeline.push({
+            url: normalized,
+            text,
+            title: null,
+            ...pageDocumentMeta(normalized, null, mimeType || "application/pdf"),
+          })
           return
         }
         if (mimeType.includes("image/jpeg")) {
@@ -214,13 +237,20 @@ export async function runCrawlSync(
           text: structured.text,
           title: structured.title,
           segments: structured.segments,
+          ...pageDocumentMeta(
+            normalized,
+            structured.title,
+            mimeType || "text/html",
+          ),
         })
       } else {
         const text = textProcessingService.extractHtmlText($)
+        const title = textProcessingService.extractHtmlTitle($)
         await pipeline.push({
           url: normalized,
           text,
-          title: textProcessingService.extractHtmlTitle($),
+          title,
+          ...pageDocumentMeta(normalized, title, mimeType || "text/html"),
         })
       }
 

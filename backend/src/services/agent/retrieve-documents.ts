@@ -1,9 +1,16 @@
 import { EmbeddingService } from "../embedding.service"
 import { DocumentService } from "../document.service"
+import {
+  rankAndDiversifyChunks,
+  type DocumentKind,
+} from "../../lib/document-kind"
 import { createLogger, safeLogText } from "../../lib/logger"
 
 const DEFAULT_SIMILARITY_THRESHOLD = 0.6
 const DEFAULT_CHUNK_LIMIT = 5
+/** Oversample vector hits before soft re-rank + diversity. */
+const VECTOR_OVERSAMPLE = 3
+const DEFAULT_MAX_CHUNKS_PER_DOCUMENT = 2
 const MAX_CHUNKS = 15
 
 export type RetrievedChunk = {
@@ -17,11 +24,14 @@ export type RetrievedChunk = {
     url: string
     title: string | null
     source: string | null
+    mimeType: string | null
+    docKind: DocumentKind | null
   }
 }
 
 /**
  * Embed a query and retrieve website document chunks (with ±1 adjacent context).
+ * Soft re-ranks by doc kind (agendas/PDFs lightly demoted) and diversifies by document.
  * Shared by the search_website_documents tool.
  */
 export async function retrieveWebsiteDocuments(
@@ -31,33 +41,42 @@ export async function retrieveWebsiteDocuments(
     similarityThreshold?: number
     chunkLimit?: number
     maxChunks?: number
+    maxChunksPerDocument?: number
   },
 ): Promise<RetrievedChunk[]> {
   const similarityThreshold =
     options?.similarityThreshold ?? DEFAULT_SIMILARITY_THRESHOLD
   const chunkLimit = options?.chunkLimit ?? DEFAULT_CHUNK_LIMIT
   const maxChunks = options?.maxChunks ?? MAX_CHUNKS
+  const maxChunksPerDocument =
+    options?.maxChunksPerDocument ?? DEFAULT_MAX_CHUNKS_PER_DOCUMENT
 
   const embeddingService = new EmbeddingService()
   const queryEmbedding = await embeddingService.generateEmbedding(query)
 
   const documentService = new DocumentService()
+  const vectorLimit = Math.max(chunkLimit * VECTOR_OVERSAMPLE, chunkLimit)
   const initialChunks = await documentService.searchSimilarChunks(
     queryEmbedding,
-    chunkLimit,
+    vectorLimit,
     similarityThreshold,
     source ?? undefined,
   )
+
+  const rankedChunks = rankAndDiversifyChunks(initialChunks, {
+    limit: chunkLimit,
+    maxChunksPerDocument,
+  })
 
   const log = createLogger("retrieve", source)
   const queryPreview = safeLogText(query, 200)
   log.info(
     queryPreview
-      ? `query=${JSON.stringify(queryPreview)} threshold=${similarityThreshold} hits=${initialChunks.length}`
-      : `threshold=${similarityThreshold} hits=${initialChunks.length}`,
+      ? `query=${JSON.stringify(queryPreview)} threshold=${similarityThreshold} hits=${initialChunks.length} ranked=${rankedChunks.length}`
+      : `threshold=${similarityThreshold} hits=${initialChunks.length} ranked=${rankedChunks.length}`,
   )
 
-  if (initialChunks.length === 0) {
+  if (rankedChunks.length === 0) {
     return []
   }
 
@@ -70,7 +89,7 @@ export async function retrieveWebsiteDocuments(
     pairKeys.add(key)
     pairs.push({ documentId, chunkIndex })
   }
-  for (const c of initialChunks) {
+  for (const c of rankedChunks) {
     const docId = c.document.id
     add(docId, c.chunkIndex - 1)
     add(docId, c.chunkIndex)
@@ -83,7 +102,7 @@ export async function retrieveWebsiteDocuments(
   )
 
   const byKey = new Map<string, RetrievedChunk>()
-  for (const c of initialChunks) {
+  for (const c of rankedChunks) {
     byKey.set(`${c.document.id}:${c.chunkIndex}`, c)
   }
   for (const c of adjacentChunks) {
@@ -111,5 +130,5 @@ export function formatRetrievedDocuments(chunks: RetrievedChunk[]): string {
     return `[Document ${index + 1}]\nSource URL: ${chunk.document.url}${chunk.document.title ? `\nTitle: ${chunk.document.title}` : ""}\n${heading}${chunk.content}`
   })
 
-  return `Found ${chunks.length} relevant document chunk(s). Use the content below to answer the user. Cite the Source URL when giving specific information.\n\n${contextParts.join("\n\n---\n\n")}`
+  return `Found ${chunks.length} relevant document chunk(s). Use the content below to answer the user. Prefer citing stable citizen-facing service pages over meeting agendas, minutes, or PDF packets when both support the answer or the user's question does not specify a specific document type. Cite the Source URL when giving specific information.\n\n${contextParts.join("\n\n---\n\n")}`
 }
