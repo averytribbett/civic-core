@@ -1,6 +1,7 @@
 import { EmbeddingService } from "../embedding.service"
 import { DocumentService } from "../document.service"
 import {
+  isMeetingIntentQuery,
   rankAndDiversifyChunks,
   type DocumentKind,
 } from "../../lib/document-kind"
@@ -32,6 +33,7 @@ export type RetrievedChunk = {
 /**
  * Embed a query and retrieve website document chunks (with ±1 adjacent context).
  * Soft re-ranks by doc kind (agendas/PDFs lightly demoted) and diversifies by document.
+ * Meeting dumps are excluded from the vector candidate set unless the query is meeting-intent.
  * Shared by the search_website_documents tool.
  */
 export async function retrieveWebsiteDocuments(
@@ -42,6 +44,8 @@ export async function retrieveWebsiteDocuments(
     chunkLimit?: number
     maxChunks?: number
     maxChunksPerDocument?: number
+    /** Override meeting-dump gate; default is derived from isMeetingIntentQuery(query). */
+    excludeMeetingDumps?: boolean
   },
 ): Promise<RetrievedChunk[]> {
   const similarityThreshold =
@@ -50,6 +54,8 @@ export async function retrieveWebsiteDocuments(
   const maxChunks = options?.maxChunks ?? MAX_CHUNKS
   const maxChunksPerDocument =
     options?.maxChunksPerDocument ?? DEFAULT_MAX_CHUNKS_PER_DOCUMENT
+  const excludeMeetingDumps =
+    options?.excludeMeetingDumps ?? !isMeetingIntentQuery(query)
 
   const embeddingService = new EmbeddingService()
   const queryEmbedding = await embeddingService.generateEmbedding(query)
@@ -61,6 +67,7 @@ export async function retrieveWebsiteDocuments(
     vectorLimit,
     similarityThreshold,
     source ?? undefined,
+    { excludeMeetingDumps },
   )
 
   const rankedChunks = rankAndDiversifyChunks(initialChunks, {
@@ -72,8 +79,8 @@ export async function retrieveWebsiteDocuments(
   const queryPreview = safeLogText(query, 200)
   log.info(
     queryPreview
-      ? `query=${JSON.stringify(queryPreview)} threshold=${similarityThreshold} hits=${initialChunks.length} ranked=${rankedChunks.length}`
-      : `threshold=${similarityThreshold} hits=${initialChunks.length} ranked=${rankedChunks.length}`,
+      ? `query=${JSON.stringify(queryPreview)} threshold=${similarityThreshold} excludeMeetingDumps=${excludeMeetingDumps} hits=${initialChunks.length} ranked=${rankedChunks.length}`
+      : `threshold=${similarityThreshold} excludeMeetingDumps=${excludeMeetingDumps} hits=${initialChunks.length} ranked=${rankedChunks.length}`,
   )
 
   if (rankedChunks.length === 0) {

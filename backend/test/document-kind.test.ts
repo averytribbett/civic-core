@@ -3,6 +3,8 @@ import test from "node:test"
 import {
   classifyDocumentKind,
   docKindPenalty,
+  isMeetingDumpUrl,
+  isMeetingIntentQuery,
   rankAndDiversifyChunks,
 } from "../src/lib/document-kind"
 
@@ -37,6 +39,40 @@ test("classifyDocumentKind prefers agenda/minutes over generic pdf", () => {
     }),
     "html_page",
   )
+})
+
+test("isMeetingDumpUrl matches archives and allows service PDFs", () => {
+  assert.equal(
+    isMeetingDumpUrl("https://example.gov/meetings/2024-01-15.pdf"),
+    true,
+  )
+  assert.equal(
+    isMeetingDumpUrl("https://example.gov/board/agenda-march.pdf"),
+    true,
+  )
+  assert.equal(
+    isMeetingDumpUrl("https://example.gov/docs/meeting-packet.pdf"),
+    true,
+  )
+  assert.equal(
+    isMeetingDumpUrl("https://example.gov/BoardDocs/foo.pdf"),
+    true,
+  )
+  assert.equal(
+    isMeetingDumpUrl("https://example.gov/forms/fee-schedule.pdf"),
+    false,
+  )
+  assert.equal(
+    isMeetingDumpUrl("https://example.gov/departments/building/permits"),
+    false,
+  )
+})
+
+test("isMeetingIntentQuery detects meeting-related searches", () => {
+  assert.equal(isMeetingIntentQuery("board agenda for march"), true)
+  assert.equal(isMeetingIntentQuery("meeting minutes"), true)
+  assert.equal(isMeetingIntentQuery("property tax due dates"), false)
+  assert.equal(isMeetingIntentQuery("building permit application"), false)
 })
 
 test("rankAndDiversifyChunks demotes agendas and caps per document", () => {
@@ -98,6 +134,5 @@ test("rankAndDiversifyChunks demotes agendas and caps per document", () => {
     ranked.filter((c) => c.document.id === "agenda-doc").length,
     2,
   )
-  // Near-tie: html 0.79 beats agenda 0.82 - 0.08 = 0.74
   assert.ok(0.79 > 0.82 - docKindPenalty("agenda"))
 })

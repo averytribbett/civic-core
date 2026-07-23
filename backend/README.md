@@ -324,6 +324,18 @@ After deploying schema changes, run `yarn db:migrate:deploy` (or rely on API ent
 2. Run one sync: `yarn crawl:sync-all:dev -- --source=<source>` (or local `POST /crawl` when `DISABLE_CRAWL` is not set).
 3. Verify chat search quality, then set `enabled=true`.
 
+### Meeting dumps and RAG
+
+The crawler **skips** meeting agenda/minutes/packet URLs (and BoardDocs-style paths). Default retrieval also **excludes** `docKind` agenda/minutes unless the search query looks meeting-related (`agenda`, `minutes`, `meeting`, `packet`).
+
+After changing crawl filters, wipe or re-sync so the index matches the new rules:
+
+```bash
+CRAWL_SOURCE=<source> yarn crawl:sync-one:dev
+```
+
+Check crawl logs for `meetingDumpSkipped=` and chat search logs for service-page URLs instead of packets.
+
 ### Observability
 
 The job emits **JSON logs** to Cloud Logging:

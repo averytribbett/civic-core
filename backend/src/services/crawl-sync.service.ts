@@ -1,5 +1,8 @@
 import { CheerioCrawler, log as crawleeLog, LogLevel } from "crawlee"
-import { classifyDocumentKind } from "../lib/document-kind"
+import {
+  classifyDocumentKind,
+  isMeetingDumpUrl,
+} from "../lib/document-kind"
 import {
   DocumentService,
   type UpsertDocumentInput,
@@ -188,6 +191,7 @@ export async function runCrawlSync(
   )
   const log = createLogger("crawl", source)
   let pageFailures = 0
+  let meetingDumpSkipped = 0
 
   // Crawlee defaults to INFO (per-request noise). Keep warnings/errors only.
   crawleeLog.setLevel(LogLevel.WARNING)
@@ -195,6 +199,10 @@ export async function runCrawlSync(
   const enqueueOptions = {
     transformRequestFunction(req: { url: string }) {
       if (!isAllowedHostRequest(req, allowedHostname)) return false
+      if (isMeetingDumpUrl(req.url)) {
+        meetingDumpSkipped += 1
+        return false
+      }
       if (!urlRegistry.tryEnqueue(req.url)) return false
       return req
     },
@@ -205,6 +213,11 @@ export async function runCrawlSync(
       const pageUrl = request.loadedUrl ?? request.url
       const normalized = normalizeUrl(pageUrl)
       const mimeType = contentType?.type ?? ""
+
+      if (isMeetingDumpUrl(normalized)) {
+        meetingDumpSkipped += 1
+        return
+      }
 
       if (typeof $ !== "function") {
         if (mimeType.includes("pdf")) {
@@ -310,7 +323,7 @@ export async function runCrawlSync(
   const durationMs = Date.now() - startTime
 
   log.info(
-    `done ms=${durationMs} pages=${crawledPageUrls.size} created=${upsertResult.created} updated=${upsertResult.updated} deleted=${upsertResult.deleted} skipped=${upsertResult.skipped} pageFailures=${pageFailures}`,
+    `done ms=${durationMs} pages=${crawledPageUrls.size} created=${upsertResult.created} updated=${upsertResult.updated} deleted=${upsertResult.deleted} skipped=${upsertResult.skipped} meetingDumpSkipped=${meetingDumpSkipped} pageFailures=${pageFailures}`,
   )
 
   return { ...upsertResult, durationMs }

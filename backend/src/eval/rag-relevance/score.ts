@@ -1,6 +1,5 @@
 import {
   rankAndDiversifyChunks,
-  resolveDocKind,
   type DocumentKind,
   type RankableChunk,
 } from "../../lib/document-kind"
@@ -49,6 +48,10 @@ function bucketForKind(kind: DocumentKind): CitationBucket {
   return "other"
 }
 
+function kindOf(chunk: RankableChunk): DocumentKind {
+  return chunk.document.docKind ?? "html_page"
+}
+
 /** Classify top-k retrieved chunks into HTML vs meeting-dump mix rates. */
 export function measureCitationMix(
   chunks: RankableChunk[],
@@ -60,13 +63,7 @@ export function measureCitationMix(
     other: 0,
   }
   for (const chunk of chunks) {
-    const kind = resolveDocKind({
-      docKind: chunk.document.docKind,
-      url: chunk.document.url,
-      title: chunk.document.title,
-      mimeType: chunk.document.mimeType,
-    })
-    counts[bucketForKind(kind)] += 1
+    counts[bucketForKind(kindOf(chunk))] += 1
   }
   const total = chunks.length || 1
   return {
@@ -105,16 +102,8 @@ export function evaluateCase(
   const baseline = measureCitationMix(baselineChunks)
   const ranked = measureCitationMix(rankedChunks)
 
-  const baselineTopKind = resolveDocKind({
-    docKind: baselineChunks[0]?.document.docKind,
-    url: baselineChunks[0]?.document.url ?? "",
-    title: baselineChunks[0]?.document.title,
-  })
-  const rankedTopKind = resolveDocKind({
-    docKind: rankedChunks[0]?.document.docKind,
-    url: rankedChunks[0]?.document.url ?? "",
-    title: rankedChunks[0]?.document.title,
-  })
+  const baselineTopKind = kindOf(baselineChunks[0]!)
+  const rankedTopKind = kindOf(rankedChunks[0]!)
 
   const improved =
     ranked.htmlPageRate > baseline.htmlPageRate &&

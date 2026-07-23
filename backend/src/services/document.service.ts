@@ -105,6 +105,8 @@ export class DocumentService {
    * @param limit - Maximum number of chunks to return (default: 5)
    * @param similarityThreshold - Minimum cosine similarity threshold (default: 0.5)
    * @param source - Optional source filter to limit search to specific document source
+   * @param options.excludeMeetingDumps - When true (default), exclude agenda/minutes
+   *   docKind so service pages can enter the candidate set
    * @returns Array of chunks with their similarity scores and document metadata
    */
   async searchSimilarChunks(
@@ -112,11 +114,13 @@ export class DocumentService {
     limit: number = 5,
     similarityThreshold: number = 0.5,
     source?: string,
+    options?: { excludeMeetingDumps?: boolean },
   ): Promise<SimilarChunkResult[]> {
     try {
       // Convert embedding array to pgvector SQL format
       // pgvector.toSql() returns '[1,2,3]' format
       const embeddingSql = pgvector.toSql(queryEmbedding)
+      const excludeMeetingDumps = options?.excludeMeetingDumps ?? true
 
       // Use the vector as a parameter to avoid SQL injection and syntax issues
       // Pass it as the first parameter and cast it to vector type in SQL
@@ -145,6 +149,10 @@ export class DocumentService {
         query += ` AND d.source = $${paramIndex}`
         params.push(source)
         paramIndex++
+      }
+
+      if (excludeMeetingDumps) {
+        query += ` AND d."docKind" NOT IN ('agenda', 'minutes')`
       }
 
       query += ` ORDER BY c.embedding <=> $1::vector LIMIT $${paramIndex}`

@@ -63,7 +63,7 @@ model Document {
   hash        String?  // for change detection
   /// MIME from crawl (e.g. text/html, application/pdf)
   mimeType    String?
-  /// Classified at crawl for RAG soft penalties; null on legacy rows until re-crawl
+  /// Classified at crawl for RAG soft penalties / meeting-dump gating
   docKind     DocumentKind?
 
   chunks      Chunk[]
