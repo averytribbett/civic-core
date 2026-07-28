@@ -22,4 +22,6 @@
   thinkingStatus: "جارٍ التفكير",
   searchingStatus: "جارٍ البحث",
   closeChat: "إغلاق الدردشة",
+  sourcesLabel: "المصادر",
+  opensInNewTab: "يُفتح في علامة تبويب جديدة",
 };

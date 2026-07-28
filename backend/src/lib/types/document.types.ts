@@ -4,5 +4,7 @@ export type IngestChunk = {
   embedding: number[]
   chunkIndex: number
   heading?: string
-  tokens?: number
+  charCount?: number
+  pageStart?: number | null
+  pageEnd?: number | null
 }

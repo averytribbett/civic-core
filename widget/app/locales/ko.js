@@ -2,7 +2,7 @@
   headerDefaultName: "채팅",
   headerCloseChat: "채팅 닫기",
   headerLogoAlt: "{{name}} 로고",
-  welcomeMessage: "{{name}}의 AI 에이전트입니다. 무엇을 도와드릴까요?",
+  welcomeMessage: "{{name}}의 AI 어시스턴트입니다. 무엇을 도와드릴까요?",
   defaultName: "카운티",
   placeholder: "질문을 입력하세요...",
   send: "보내기",
@@ -22,4 +22,6 @@
   thinkingStatus: "생각 중",
   searchingStatus: "검색 중",
   closeChat: "채팅 닫기",
+  sourcesLabel: "출처",
+  opensInNewTab: "새 탭에서 열림",
 };

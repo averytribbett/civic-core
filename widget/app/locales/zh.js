@@ -22,4 +22,6 @@
   thinkingStatus: "思考中",
   searchingStatus: "搜索中",
   closeChat: "关闭聊天",
+  sourcesLabel: "来源",
+  opensInNewTab: "在新标签页中打开",
 };

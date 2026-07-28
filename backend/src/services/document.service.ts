@@ -11,7 +11,7 @@ import { prisma } from "../lib/prisma"
 import { logger } from "../lib/logger"
 import { DocumentHashService } from "./document-hash.service"
 import { EmbeddingService } from "./embedding.service"
-import type { HtmlSegment } from "./text-processing.service"
+import type { HtmlSegment, PageRange, ChunkWithMeta } from "./text-processing.service"
 import { TextProcessingService } from "./text-processing.service"
 
 const EMBEDDING_BATCH_SIZE = 100
@@ -25,11 +25,6 @@ type DocWithChunks = {
   ingestChunks: IngestChunk[]
 }
 
-type ChunkWithHeading = {
-  content: string
-  heading: string | null
-}
-
 export type UpsertDocumentInput = {
   source: string
   documents: {
@@ -37,6 +32,7 @@ export type UpsertDocumentInput = {
     text: string
     title?: string | null
     segments?: HtmlSegment[]
+    pageMap?: PageRange[]
     mimeType?: string | null
     docKind?: DocumentKind | null
   }[]
@@ -47,6 +43,8 @@ export type SimilarChunkResult = {
   chunkIndex: number
   content: string
   heading: string | null
+  pageStart: number | null
+  pageEnd: number | null
   similarity: number
   document: {
     id: string
@@ -130,6 +128,8 @@ export class DocumentService {
           c."chunkIndex" as "chunkIndex",
           c.content,
           c.heading,
+          c."pageStart" as "pageStart",
+          c."pageEnd" as "pageEnd",
           1 - (c.embedding <=> $1::vector) as similarity,
           d.id as "documentId",
           d.url as "documentUrl",
@@ -164,6 +164,8 @@ export class DocumentService {
           chunkIndex: number
           content: string
           heading: string | null
+          pageStart: number | null
+          pageEnd: number | null
           similarity: number
           documentId: string
           documentUrl: string
@@ -179,6 +181,8 @@ export class DocumentService {
         chunkIndex: row.chunkIndex,
         content: row.content,
         heading: row.heading,
+        pageStart: row.pageStart,
+        pageEnd: row.pageEnd,
         similarity: parseFloat(row.similarity.toString()),
         document: {
           id: row.documentId,
@@ -227,6 +231,8 @@ export class DocumentService {
       chunkIndex: c.chunkIndex,
       content: c.content,
       heading: c.heading,
+      pageStart: c.pageStart,
+      pageEnd: c.pageEnd,
       similarity: 0,
       document: {
         id: c.document.id,
@@ -418,19 +424,24 @@ export class DocumentService {
     return totals
   }
 
-  private chunkDocument(doc: CrawlDocument): ChunkWithHeading[] {
+  private chunkDocument(doc: CrawlDocument): ChunkWithMeta[] {
     const trimmed = doc.text.trim()
     if (!trimmed) return []
+    if (doc.pageMap && doc.pageMap.length > 0) {
+      return this.textProcessingService.chunkTextWithPages(trimmed, doc.pageMap)
+    }
     if (doc.segments && doc.segments.length > 0) {
       return this.textProcessingService.chunkTextWithHeadings(
         trimmed,
         doc.segments,
       )
     }
-    return this.textProcessingService
-      .chunkText(trimmed)
-      .filter(Boolean)
-      .map((content) => ({ content, heading: null as string | null }))
+    return this.textProcessingService.chunkText(trimmed).map((content) => ({
+      content,
+      heading: null as string | null,
+      pageStart: null,
+      pageEnd: null,
+    }))
   }
 
   private isEmbeddingTokenLimitError(err: unknown): boolean {
@@ -456,7 +467,7 @@ export class DocumentService {
     type PendingDoc = {
       doc: CrawlDocument
       hash: string
-      chunks: ChunkWithHeading[]
+      chunks: ChunkWithMeta[]
     }
 
     const pending: PendingDoc[] = []
@@ -516,7 +527,9 @@ export class DocumentService {
         embedding: docEmbeddings[idx]!,
         chunkIndex: idx,
         heading: c.heading ?? undefined,
-        tokens: c.content.length,
+        charCount: c.content.length,
+        pageStart: c.pageStart ?? null,
+        pageEnd: c.pageEnd ?? null,
       }))
       result.push({ doc, hash, ingestChunks })
     }
@@ -551,7 +564,9 @@ export class DocumentService {
             embedding: embeddings[idx]!,
             chunkIndex: idx,
             heading: c.heading ?? undefined,
-            tokens: c.content.length,
+            charCount: c.content.length,
+            pageStart: c.pageStart ?? null,
+            pageEnd: c.pageEnd ?? null,
           })),
         })
       } catch (err: unknown) {
@@ -611,7 +626,7 @@ export class DocumentService {
       const id = randomUUID()
       const embeddingSql = pgvector.toSql(c.embedding)
       placeholders.push(
-        `($${idx}, $${idx + 1}, $${idx + 2}, $${idx + 3}, $${idx + 4}::vector, $${idx + 5}, $${idx + 6}, $${idx + 7}, $${idx + 8})`,
+        `($${idx}, $${idx + 1}, $${idx + 2}, $${idx + 3}, $${idx + 4}::vector, $${idx + 5}, $${idx + 6}, $${idx + 7}, $${idx + 8}, $${idx + 9}, $${idx + 10})`,
       )
       params.push(
         id,
@@ -620,14 +635,16 @@ export class DocumentService {
         this.sanitizeTextForDb(c.content) ?? "",
         embeddingSql,
         this.sanitizeTextForDb(c.heading ?? null),
-        c.tokens ?? null,
+        c.charCount ?? null,
+        c.pageStart ?? null,
+        c.pageEnd ?? null,
         now,
         now,
       )
-      idx += 9
+      idx += 11
     }
     const query = `
-      INSERT INTO "chunks" ("id", "documentId", "chunkIndex", "content", "embedding", "heading", "tokens", "createdAt", "updatedAt")
+      INSERT INTO "chunks" ("id", "documentId", "chunkIndex", "content", "embedding", "heading", "charCount", "pageStart", "pageEnd", "createdAt", "updatedAt")
       VALUES ${placeholders.join(", ")}
     `
     await client.$executeRawUnsafe(query, ...params)

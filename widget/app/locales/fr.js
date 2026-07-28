@@ -2,7 +2,7 @@
   headerDefaultName: "Chat",
   headerCloseChat: "Fermer le chat",
   headerLogoAlt: "Logo de {{name}}",
-  welcomeMessage: "Je suis un agent IA pour {{name}}. Comment pouvons-nous vous aider aujourd'hui ?",
+  welcomeMessage: "Je suis un assistant IA pour {{name}}. Comment pouvons-nous vous aider aujourd'hui ?",
   defaultName: "le comté",
   placeholder: "Posez une question...",
   send: "Envoyer",
@@ -22,4 +22,6 @@
   thinkingStatus: "Réflexion",
   searchingStatus: "Recherche",
   closeChat: "Fermer le chat",
+  sourcesLabel: "Sources",
+  opensInNewTab: "S’ouvre dans un nouvel onglet",
 };

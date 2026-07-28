@@ -2,7 +2,7 @@
   headerDefaultName: "チャット",
   headerCloseChat: "チャットを閉じる",
   headerLogoAlt: "{{name}} ロゴ",
-  welcomeMessage: "{{name}} のAIエージェントです。本日はどのようなご用件でしょうか？",
+  welcomeMessage: "{{name}} のAIアシスタントです。本日はどのようなご用件でしょうか？",
   defaultName: "当郡",
   placeholder: "質問を入力...",
   send: "送信",
@@ -22,4 +22,6 @@
   thinkingStatus: "考え中",
   searchingStatus: "検索中",
   closeChat: "チャットを閉じる",
+  sourcesLabel: "出典",
+  opensInNewTab: "新しいタブで開きます",
 };

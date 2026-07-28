@@ -11,10 +11,28 @@ export type HtmlSegment = {
   endIndex: number
 }
 
+export type PageRange = {
+  page: number
+  startIndex: number
+  endIndex: number
+}
+
 export type ExtractHtmlStructuredResult = {
   title: string | null
   text: string
   segments: HtmlSegment[]
+}
+
+export type ExtractPdfResult = {
+  text: string
+  pageMap: PageRange[]
+}
+
+export type ChunkWithMeta = {
+  content: string
+  heading: string | null
+  pageStart: number | null
+  pageEnd: number | null
 }
 
 export class TextProcessingService {
@@ -161,11 +179,35 @@ export class TextProcessingService {
     return { title, text, segments: finalSegments }
   }
 
-  extractPdfText = async (url: string): Promise<string> => {
+  extractPdfText = async (url: string): Promise<ExtractPdfResult> => {
     const parser = new PDFParse({ url })
-
     const parsedPdf = await parser.getText()
-    return parsedPdf.text.replace(/\s+/g, " ").trim()
+    const pageMap: PageRange[] = []
+    const parts: string[] = []
+    let pos = 0
+
+    for (const page of parsedPdf.pages ?? []) {
+      const normalized = (page.text ?? "").replace(/\s+/g, " ").trim()
+      if (!normalized) continue
+      if (parts.length > 0) {
+        pos += 1 // space joiner between pages
+      }
+      const startIndex = pos
+      parts.push(normalized)
+      pos += normalized.length
+      pageMap.push({
+        page: page.num,
+        startIndex,
+        endIndex: pos,
+      })
+    }
+
+    const text =
+      parts.length > 0
+        ? parts.join(" ")
+        : (parsedPdf.text ?? "").replace(/\s+/g, " ").trim()
+
+    return { text, pageMap }
   }
 
   chunkText(text: string): string[] {
@@ -189,13 +231,44 @@ export class TextProcessingService {
   chunkTextWithHeadings(
     text: string,
     segments: HtmlSegment[],
-  ): { content: string; heading: string | null }[] {
+  ): ChunkWithMeta[] {
     const chunks = this.chunkText(text)
-    const result: { content: string; heading: string | null }[] = []
+    const result: ChunkWithMeta[] = []
     let chunkStart = 0
     for (const content of chunks) {
       const heading = this.getHeadingForOffset(segments, chunkStart)
-      result.push({ content, heading })
+      result.push({
+        content,
+        heading,
+        pageStart: null,
+        pageEnd: null,
+      })
+      chunkStart += CHUNK_SIZE - OVERLAP
+      if (chunkStart < 0) chunkStart = 0
+    }
+    return result
+  }
+
+  /**
+   * Chunk PDF text and assign pageStart/pageEnd from a pageMap built during extraction.
+   */
+  chunkTextWithPages(text: string, pageMap: PageRange[]): ChunkWithMeta[] {
+    const chunks = this.chunkText(text)
+    const result: ChunkWithMeta[] = []
+    let chunkStart = 0
+    for (const content of chunks) {
+      const chunkEnd = Math.min(chunkStart + content.length, text.length)
+      const pageStart = this.getPageForOffset(pageMap, chunkStart)
+      const pageEnd = this.getPageForOffset(
+        pageMap,
+        Math.max(chunkEnd - 1, chunkStart),
+      )
+      result.push({
+        content,
+        heading: null,
+        pageStart,
+        pageEnd,
+      })
       chunkStart += CHUNK_SIZE - OVERLAP
       if (chunkStart < 0) chunkStart = 0
     }
@@ -210,5 +283,19 @@ export class TextProcessingService {
       if (offset >= seg.startIndex && offset < seg.endIndex) return seg.heading
     }
     return segments.length > 0 ? segments[segments.length - 1]!.heading : null
+  }
+
+  private getPageForOffset(
+    pageMap: PageRange[],
+    offset: number,
+  ): number | null {
+    if (pageMap.length === 0) return null
+    for (const range of pageMap) {
+      if (offset >= range.startIndex && offset < range.endIndex) {
+        return range.page
+      }
+    }
+    // Past last range (e.g. trailing whitespace) → last page
+    return pageMap[pageMap.length - 1]!.page
   }
 }

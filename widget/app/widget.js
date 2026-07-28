@@ -284,11 +284,22 @@ async function markdownToHtml(text) {
   return text;
 }
 
+/** Remove citation markers like [1] from display text (chips carry the links). */
+function stripCitationMarkers(text) {
+  if (typeof text !== "string" || !text) return text;
+  return text
+    .replace(/\s*\[(\d+)\]/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/ {2,}/g, " ")
+    .trim();
+}
+
 async function renderMarkdownInto(bodyEl, text, { stabilize = false } = {}) {
+  const withoutCitations = stripCitationMarkers(text);
   const source =
     stabilize && typeof stabilizeIncompleteMarkdown === "function"
-      ? stabilizeIncompleteMarkdown(text)
-      : text;
+      ? stabilizeIncompleteMarkdown(withoutCitations)
+      : withoutCitations;
   const rawHtml = await markdownToHtml(source);
   const safeHtml =
     typeof DOMPurify !== "undefined"
@@ -305,6 +316,7 @@ async function renderMarkdownInto(bodyEl, text, { stabilize = false } = {}) {
 }
 
 function attachVoteActions(div, messageId, initialVote) {
+  if (div.querySelector(".message-actions")) return;
   const actions = document.createElement("div");
   actions.className = "message-actions";
   const thumbsUpSvg =
@@ -391,7 +403,7 @@ function animateMessageOut(el) {
 }
 
 async function addMessage(text, from, options = {}) {
-  const { messageId, vote: initialVote } = options;
+  const { messageId, vote: initialVote, sources } = options;
   const div = document.createElement("div");
   div.className = `message ${from}`;
   if (messageId) div.dataset.messageId = messageId;
@@ -405,6 +417,10 @@ async function addMessage(text, from, options = {}) {
   }
   div.appendChild(body);
 
+  if (from === "agent") {
+    attachSources(div, sources);
+  }
+
   if (from === "agent" && messageId) {
     attachVoteActions(div, messageId, initialVote);
   }
@@ -413,6 +429,68 @@ async function addMessage(text, from, options = {}) {
   animateMessageIn(div);
   messagesEl.scrollTop = messagesEl.scrollHeight;
   return div;
+}
+
+function sourceChipLabel(source) {
+  return source.title || source.heading || source.url || "Source";
+}
+
+let sourcesLabelSeq = 0;
+
+function attachSources(div, sources) {
+  const existing = div.querySelector(".message-sources");
+  if (existing) existing.remove();
+  if (!Array.isArray(sources) || sources.length === 0) return;
+
+  const wrap = document.createElement("nav");
+  wrap.className = "message-sources";
+
+  const labelId = `message-sources-label-${++sourcesLabelSeq}`;
+  const label = document.createElement("h3");
+  label.className = "message-sources-label";
+  label.id = labelId;
+  label.textContent =
+    typeof i18n !== "undefined" ? i18n.t("sourcesLabel") : "Sources";
+  wrap.setAttribute("aria-labelledby", labelId);
+  wrap.appendChild(label);
+
+  const list = document.createElement("ul");
+  list.className = "message-sources-list";
+  list.setAttribute("aria-labelledby", labelId);
+
+  const opensInNewTab =
+    typeof i18n !== "undefined" ? i18n.t("opensInNewTab") : "Opens in a new tab";
+
+  for (const source of sources) {
+    const href = source.href || source.url;
+    if (!href || typeof href !== "string") continue;
+
+    const item = document.createElement("li");
+    item.className = "message-sources-item";
+
+    const a = document.createElement("a");
+    a.className = "message-source-chip";
+    a.href = href;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+
+    const visibleLabel = sourceChipLabel(source);
+    a.textContent = visibleLabel;
+
+    const srHint = document.createElement("span");
+    srHint.className = "sr-only";
+    srHint.textContent = ` (${opensInNewTab})`;
+    a.appendChild(srHint);
+
+    item.appendChild(a);
+    list.appendChild(item);
+  }
+  if (!list.childElementCount) return;
+  wrap.appendChild(list);
+
+  const actions = div.querySelector(".message-actions");
+  if (actions) div.insertBefore(wrap, actions);
+  else div.appendChild(wrap);
 }
 
 function createStreamingAgentMessage() {
@@ -619,13 +697,18 @@ form.onsubmit = async (e) => {
     clearStatusOnce();
     if (data.conversationId) conversationId = data.conversationId;
     const response = data.response || rawMarkdown;
+    const sources = Array.isArray(data.sources) ? data.sources : [];
 
     if (!streamUi && !rawMarkdown) {
-      await addMessage(response, "agent", { messageId: data.agentMessageId });
+      await addMessage(response, "agent", {
+        messageId: data.agentMessageId,
+        sources,
+      });
     } else {
       ensureStreamUi();
       streamUi.div.classList.remove("message--streaming");
       await renderMarkdownInto(streamUi.body, response, { stabilize: false });
+      attachSources(streamUi.div, sources);
       if (data.agentMessageId) {
         streamUi.div.dataset.messageId = data.agentMessageId;
         attachVoteActions(streamUi.div, data.agentMessageId);

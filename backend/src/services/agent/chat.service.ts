@@ -12,8 +12,10 @@ import {
 } from "@langchain/core/messages"
 import { StructuredToolInterface } from "@langchain/core/tools"
 import { LLMProvider } from "../../lib/types/chat.types"
-import { createLogger, safeLogText } from "../../lib/logger"
+import type { ChatSource } from "../../lib/types/chat-source.types"
+import { createLogger, isProductionLogging, safeLogText } from "../../lib/logger"
 import { createSearchWebsiteDocumentsTool } from "./tools/search-website-documents"
+import { SourcesCollector } from "./sources-collector"
 
 const MAX_HISTORY_LENGTH = 20
 const MAX_HISTORY_ITEM_LENGTH = 2000
@@ -24,6 +26,14 @@ type BoundLLM = Pick<BaseChatModel, "invoke"> & {
   stream?: (
     messages: BaseMessage[],
   ) => AsyncIterable<AIMessageChunk> | Promise<AsyncIterable<AIMessageChunk>>
+}
+
+type ChatResult = {
+  response: string
+  sources: ChatSource[]
+  model: string | undefined
+  inputTokens: number | undefined
+  outputTokens: number | undefined
 }
 
 function messageContentToString(content: unknown): string {
@@ -54,6 +64,7 @@ export class ChatService {
   private readonly source: string
   private readonly systemPrompt: string
   private searchTool: StructuredToolInterface
+  private sourcesCollector: SourcesCollector
 
   private parseHistory(raw: unknown): BaseMessage[] {
     if (raw === undefined || raw === null) return []
@@ -92,8 +103,15 @@ export class ChatService {
     this.systemPrompt = systemPrompt
     this.provider = (process.env.LLM_PROVIDER as LLMProvider) || "openai"
     this.model = process.env.LLM_MODEL
-    this.searchTool = createSearchWebsiteDocumentsTool(source)
+    this.sourcesCollector = new SourcesCollector()
+    this.searchTool = createSearchWebsiteDocumentsTool(source, {
+      getCollector: () => this.sourcesCollector,
+    })
     this.llm = this.createLLM()
+  }
+
+  private resetSourcesCollector() {
+    this.sourcesCollector = new SourcesCollector()
   }
 
   private createLLM(): BoundLLM {
@@ -115,8 +133,8 @@ export class ChatService {
       case "openai": {
         const openaiOpts: ChatOpenAIFields = {
           model,
-          temperature,
           maxCompletionTokens: maxTokens,
+          useResponsesApi: true,
         }
         if (
           reasoningEffort &&
@@ -214,11 +232,12 @@ export class ChatService {
             query: typeof toolInput.query === "string" ? toolInput.query : "",
           }
           const queryPreview = safeLogText(validatedInput.query, 200)
-          log.info(
-            queryPreview
-              ? `Invoking ${toolName} query=${JSON.stringify(queryPreview)}`
-              : `Invoking ${toolName}`,
-          )
+          const queryLog = isProductionLogging()
+            ? "query=(redacted)"
+            : queryPreview
+              ? `query=${JSON.stringify(queryPreview)}`
+              : "query=(empty)"
+          log.info(`Invoking ${toolName} ${queryLog}`)
           const result = await tool.invoke(validatedInput)
           log.info(`${toolName} completed`)
 
@@ -258,13 +277,9 @@ export class ChatService {
   async chat(
     message: string,
     rawHistory?: unknown,
-  ): Promise<{
-    response: string
-    model: string | undefined
-    inputTokens: number | undefined
-    outputTokens: number | undefined
-  }> {
+  ): Promise<ChatResult> {
     try {
+      this.resetSourcesCollector()
       const messages = this.buildMessages(message, rawHistory)
       let inputTokens = 0
       let outputTokens = 0
@@ -295,6 +310,7 @@ export class ChatService {
 
       return {
         response: text,
+        sources: this.sourcesCollector.buildCitedSources(text),
         model: this.model,
         inputTokens: inputTokens > 0 ? inputTokens : undefined,
         outputTokens: outputTokens > 0 ? outputTokens : undefined,
@@ -373,11 +389,13 @@ export class ChatService {
     | {
         type: "complete"
         response: string
+        sources: ChatSource[]
         model: string | undefined
         inputTokens: number | undefined
         outputTokens: number | undefined
       }
   > {
+    this.resetSourcesCollector()
     const messages = this.buildMessages(message, rawHistory)
     let inputTokens = 0
     let outputTokens = 0
@@ -391,6 +409,7 @@ export class ChatService {
       yield {
         type: "complete",
         response: result.response,
+        sources: result.sources,
         model: result.model,
         inputTokens: result.inputTokens,
         outputTokens: result.outputTokens,
@@ -436,6 +455,7 @@ export class ChatService {
     yield {
       type: "complete",
       response: assembled,
+      sources: this.sourcesCollector.buildCitedSources(assembled),
       model: this.model,
       inputTokens: inputTokens > 0 ? inputTokens : undefined,
       outputTokens: outputTokens > 0 ? outputTokens : undefined,

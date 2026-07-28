@@ -5,7 +5,8 @@ import {
   rankAndDiversifyChunks,
   type DocumentKind,
 } from "../../lib/document-kind"
-import { createLogger, safeLogText } from "../../lib/logger"
+import { createLogger, isProductionLogging, safeLogText } from "../../lib/logger"
+import type { SourcesCollector } from "./sources-collector"
 
 const DEFAULT_SIMILARITY_THRESHOLD = 0.6
 const DEFAULT_CHUNK_LIMIT = 5
@@ -19,6 +20,8 @@ export type RetrievedChunk = {
   chunkIndex: number
   content: string
   heading: string | null
+  pageStart: number | null
+  pageEnd: number | null
   similarity: number
   document: {
     id: string
@@ -77,10 +80,13 @@ export async function retrieveWebsiteDocuments(
 
   const log = createLogger("retrieve", source)
   const queryPreview = safeLogText(query, 200)
+  const queryLog = isProductionLogging()
+    ? "query=(redacted)"
+    : queryPreview
+      ? `query=${JSON.stringify(queryPreview)}`
+      : "query=(empty)"
   log.info(
-    queryPreview
-      ? `query=${JSON.stringify(queryPreview)} threshold=${similarityThreshold} excludeMeetingDumps=${excludeMeetingDumps} hits=${initialChunks.length} ranked=${rankedChunks.length}`
-      : `threshold=${similarityThreshold} excludeMeetingDumps=${excludeMeetingDumps} hits=${initialChunks.length} ranked=${rankedChunks.length}`,
+    `${queryLog} threshold=${similarityThreshold} excludeMeetingDumps=${excludeMeetingDumps} hits=${initialChunks.length} ranked=${rankedChunks.length}`,
   )
 
   if (rankedChunks.length === 0) {
@@ -127,15 +133,27 @@ export async function retrieveWebsiteDocuments(
 }
 
 /** Format retrieved chunks for LLM context (tool result). */
-export function formatRetrievedDocuments(chunks: RetrievedChunk[]): string {
+export function formatRetrievedDocuments(
+  chunks: RetrievedChunk[],
+  collector?: SourcesCollector,
+): string {
   if (chunks.length === 0) {
     return "No relevant documents found for the query."
   }
 
-  const contextParts = chunks.map((chunk, index) => {
+  const labeled = collector
+    ? collector.register(chunks)
+    : chunks.map((chunk, i) => ({ citationIndex: i + 1, chunk }))
+
+  const contextParts = labeled.map(({ citationIndex, chunk }) => {
     const heading = chunk.heading ? `Heading: ${chunk.heading}\n` : ""
-    return `[Document ${index + 1}]\nSource URL: ${chunk.document.url}${chunk.document.title ? `\nTitle: ${chunk.document.title}` : ""}\n${heading}${chunk.content}`
+    const page =
+      chunk.pageStart != null ? `Page: ${chunk.pageStart}\n` : ""
+    const title = chunk.document.title
+      ? `Title: ${chunk.document.title}\n`
+      : ""
+    return `[${citationIndex}]\n${title}${page}${heading}${chunk.content}`
   })
 
-  return `Found ${chunks.length} relevant document chunk(s). Use the content below to answer the user. Prefer citing stable citizen-facing service pages over meeting agendas, minutes, or PDF packets when both support the answer or the user's question does not specify a specific document type. Cite the Source URL when giving specific information.\n\n${contextParts.join("\n\n---\n\n")}`
+  return `Found ${chunks.length} relevant document chunk(s). Use the content below to answer the user. Prefer citing stable citizen-facing service pages over meeting agendas, minutes, or PDF packets when both support the answer or the user's question does not specify a specific document type. When you rely on a source for a specific fact, mark it inline with its index like [1] or [2]. Only cite indices you actually used. Do not include URLs, markdown hyperlinks, or a Sources section — the UI shows citation chips separately. Still use normal markdown formatting (bold, lists, headings) for readability.\n\n${contextParts.join("\n\n---\n\n")}`
 }

@@ -2,7 +2,7 @@
   headerDefaultName: "Chat",
   headerCloseChat: "Close chat",
   headerLogoAlt: "{{name}} logo",
-  welcomeMessage: "I am an AI agent for {{name}}. How can we help you today?",
+  welcomeMessage: "I am an AI assistant for {{name}}. How can we help you today?",
   defaultName: "the county",
   placeholder: "Type a question...",
   send: "Send",
@@ -22,4 +22,6 @@
   thinkingStatus: "Thinking",
   searchingStatus: "Searching",
   closeChat: "Close chat",
+  sourcesLabel: "Sources",
+  opensInNewTab: "Opens in a new tab",
 };

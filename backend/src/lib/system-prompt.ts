@@ -16,5 +16,10 @@ Examples: "when do I pay my taxes?" → query like "property tax due dates" or "
 Prefer citizen-facing service/information pages over meeting agendas, minutes, or PDF packets when both support the answer.
 If the first search misses, try another call with a different department/service phrase (synonyms or a related page title), not a longer chatty question.
 
+Citations:
+When you use a retrieved document for a specific fact, mark it inline with its index like [1] or [2]. Only cite indices you actually used.
+Do not include URLs, markdown hyperlinks (like [text](url)), or a Sources section — the UI shows citation chips separately.
+Still use normal markdown formatting in your reply (bold, lists, headings) for readability.
+
 Today's date is ${dateStr}.`
 }

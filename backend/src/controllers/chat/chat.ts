@@ -1,6 +1,7 @@
 import { Request, Response } from "express"
 import { ChatService } from "../../services/agent/chat.service"
 import { renderSystemPrompt } from "../../lib/system-prompt"
+import type { ChatSource } from "../../lib/types/chat-source.types"
 import { prisma } from "../../lib/prisma"
 import { encrypt } from "../../lib/encryption"
 import { createLogger, safeLogText } from "../../lib/logger"
@@ -16,6 +17,7 @@ async function persistChatTurn(opts: {
   existingConversationId: string | null
   message: string
   response: string
+  sources: ChatSource[]
   language: string | undefined
   model: string | undefined
   inputTokens: number | undefined
@@ -56,6 +58,7 @@ async function persistChatTurn(opts: {
       inputTokens: opts.inputTokens ?? undefined,
       outputTokens: opts.outputTokens ?? undefined,
       responseTime: opts.responseTime,
+      sources: opts.sources.length > 0 ? opts.sources : undefined,
     },
   })
 
@@ -146,6 +149,7 @@ export const chat = async (req: Request, res: Response) => {
       try {
         let complete: {
           response: string
+          sources: ChatSource[]
           model: string | undefined
           inputTokens: number | undefined
           outputTokens: number | undefined
@@ -173,6 +177,7 @@ export const chat = async (req: Request, res: Response) => {
           existingConversationId: conversationIdRaw,
           message,
           response: complete.response,
+          sources: complete.sources,
           language,
           model: complete.model,
           inputTokens: complete.inputTokens,
@@ -186,6 +191,7 @@ export const chat = async (req: Request, res: Response) => {
 
         writeSse(res, "done", {
           response: complete.response,
+          sources: complete.sources,
           conversationId: persisted.conversationId,
           agentMessageId: persisted.agentMessageId,
         })
@@ -205,7 +211,7 @@ export const chat = async (req: Request, res: Response) => {
     }
 
     const startTime = Date.now()
-    const { response, model, inputTokens, outputTokens } =
+    const { response, sources, model, inputTokens, outputTokens } =
       await chatService.chat(message, rawHistory)
     const responseTime = Date.now() - startTime
 
@@ -214,6 +220,7 @@ export const chat = async (req: Request, res: Response) => {
       existingConversationId: conversationIdRaw,
       message,
       response,
+      sources,
       language,
       model,
       inputTokens,
@@ -227,6 +234,7 @@ export const chat = async (req: Request, res: Response) => {
 
     res.status(200).json({
       response,
+      sources,
       conversationId: persisted.conversationId,
       agentMessageId: persisted.agentMessageId,
     })

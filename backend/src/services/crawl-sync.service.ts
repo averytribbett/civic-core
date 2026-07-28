@@ -221,11 +221,13 @@ export async function runCrawlSync(
 
       if (typeof $ !== "function") {
         if (mimeType.includes("pdf")) {
-          const text = await textProcessingService.extractPdfText(normalized)
+          const { text, pageMap } =
+            await textProcessingService.extractPdfText(normalized)
           await pipeline.push({
             url: normalized,
             text,
             title: null,
+            pageMap,
             ...pageDocumentMeta(normalized, null, mimeType || "application/pdf"),
           })
           return

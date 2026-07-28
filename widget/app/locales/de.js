@@ -2,7 +2,7 @@
   headerDefaultName: "Chat",
   headerCloseChat: "Chat schließen",
   headerLogoAlt: "{{name}}-Logo",
-  welcomeMessage: "Ich bin ein KI-Agent für {{name}}. Wie können wir Ihnen heute helfen?",
+  welcomeMessage: "Ich bin ein KI-Assistent für {{name}}. Wie können wir Ihnen heute helfen?",
   defaultName: "den Landkreis",
   placeholder: "Stellen Sie eine Frage...",
   send: "Senden",
@@ -22,4 +22,6 @@
   thinkingStatus: "Denke nach",
   searchingStatus: "Suche",
   closeChat: "Chat schließen",
+  sourcesLabel: "Quellen",
+  opensInNewTab: "Öffnet in einem neuen Tab",
 };
