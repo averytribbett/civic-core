@@ -60,9 +60,11 @@ body {
 
 .chat-header-logo {
   display: none;
-  width: 32px;
   height: 32px;
+  width: auto;
+  max-width: 140px;
   object-fit: contain;
+  flex-shrink: 0;
 }
 
 .chat-header-name {
@@ -846,8 +848,9 @@ html.is-mobile .chat-header-name {
 }
 
 html.is-mobile .chat-header-logo {
-  width: 28px;
   height: 28px;
+  width: auto;
+  max-width: 120px;
   margin-right: auto;
 }
 
