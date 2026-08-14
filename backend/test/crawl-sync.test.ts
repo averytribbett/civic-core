@@ -1,6 +1,11 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { CrawlIngestPipeline } from "../src/services/crawl-sync.service"
+import { load } from "cheerio"
+import {
+  CrawlIngestPipeline,
+  isBotBlockedHtml,
+  shouldSkipCrawlUrl,
+} from "../src/services/crawl-sync.service"
 import { dedupeDocumentsByUrl } from "../src/services/document.service"
 import type {
   UpsertDocumentInput,
@@ -75,4 +80,26 @@ test("dedupeDocumentsByUrl keeps one document per URL before database writes", (
     ],
   )
   assert.equal(result.skipped, 1)
+})
+
+test("isBotBlockedHtml detects Denver WAF interstitial", () => {
+  const $ = load(`
+    <html><head><title>Request Rejected</title></head>
+    <body>The requested URL was rejected. Support ID is Bot CCD: 123</body></html>
+  `)
+  assert.equal(isBotBlockedHtml($, 252), true)
+})
+
+test("shouldSkipCrawlUrl skips OpenCities files and language alternates", () => {
+  assert.equal(
+    shouldSkipCrawlUrl(
+      "https://www.denvergov.org/files/oc-templates/x/oc_main.css",
+    ),
+    true,
+  )
+  assert.equal(
+    shouldSkipCrawlUrl("https://www.denvergov.org/Home?oc_lang=es"),
+    true,
+  )
+  assert.equal(shouldSkipCrawlUrl("https://www.denvergov.org/Services"), false)
 })

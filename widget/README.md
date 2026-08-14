@@ -38,6 +38,10 @@ Point `widgetUrl` at the shell on the same origin as your static server (e.g. Li
 
 See [`demo.html`](demo.html) for a fuller example (`name`, `logo`, etc.).
 
+### Switching jurisdictions in `demo.html`
+
+With the API running and **`ENABLE_DEV_ROUTES=true`** in `backend/.env`, open `demo.html` and use **Dev: jurisdiction** to pick any row from `GET /dev/jurisdictions`. The choice is stored in `localStorage` (`civiccore.dev.jurisdiction`) and restored on reload. Full onboarding steps: [root README](../README.md#add-a-jurisdiction-locally).
+
 ### Config fields
 
 - **apiBaseUrl**: Base URL of the backend (e.g. `https://your-api-xxxxx.run.app`). Required unless the widget shell is same-origin as the API.

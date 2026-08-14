@@ -69,11 +69,15 @@ async function syncOneJurisdiction(jurisdiction: {
 async function main(): Promise<void> {
   const sourceFilter = resolveSourceFilter(process.argv.slice(2))
 
+  // With an explicit source filter (onboarding), allow enabled=false so a first
+  // crawl can run before the weekly job includes the row. Without a filter,
+  // only enabled jurisdictions run (production / sync-all).
   const jurisdictions = await prisma.jurisdiction.findMany({
     where: {
-      enabled: true,
       crawlUrl: { not: null },
-      ...(sourceFilter ? { source: sourceFilter } : {}),
+      ...(sourceFilter
+        ? { source: sourceFilter }
+        : { enabled: true }),
     },
     orderBy: { source: "asc" },
   })
@@ -83,7 +87,7 @@ async function main(): Promise<void> {
       event: "crawl_sync_complete",
       status: "no_op",
       message: sourceFilter
-        ? `No enabled jurisdiction with crawlUrl for source=${sourceFilter}`
+        ? `No jurisdiction with crawlUrl for source=${sourceFilter}`
         : "No enabled jurisdictions with crawlUrl",
     })
     return

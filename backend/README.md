@@ -41,6 +41,7 @@ yarn start:release
 | `yarn crawl:sync-all:dev` | Same as above via `ts-node` (uses `.env`) |
 | `yarn crawl:sync-one:dev` | Sync one jurisdiction (`CRAWL_SOURCE` or `--source=`) |
 | `yarn crawl:sync-all:dev` | Sync all enabled jurisdictions sequentially (local dev) |
+| `yarn jurisdiction:sync` | Upsert `jurisdiction` rows from `secrets/jurisdictions.json` (local) |
 
 Legacy names `prisma:migrate`, `prisma:generate`, and `prisma:migrate:production` still work and call the same Prisma commands.
 
@@ -61,10 +62,11 @@ Set these in `.env` locally, or in the Cloud Run service (or Secret Manager) for
 | `WIDGET_ALLOWED_ORIGINS` | **Yes** (for `/chat`) | Comma-separated **origins** where `widget.html` is hosted (iframe `fetch` uses this origin). Example: `https://civic-core-widget.web.app,https://app.civiccore.ai`. For Live Server, add `http://127.0.0.1:5500`. If unset or empty, chat returns **503**. |
 | `MESSAGE_ENCRYPTION_KEY` | No | Optional message encryption |
 | `DISABLE_CRAWL` | No | Set to **`true`** on the **API** Cloud Run service to turn off **`/crawl`** and never load **crawlee**. The weekly sync uses a separate Cloud Run **Job**, not this route. |
+| `ENABLE_DEV_ROUTES` | No | Set to **`true` locally only** to mount **`GET /dev/jurisdictions`** (widget demo jurisdiction picker). Omit / leave unset on Cloud Run. |
 | `SKIP_DB_MIGRATE` | No | Set to **`true`** to skip `prisma migrate deploy` in the container (run **`yarn db:migrate:deploy`** yourself when schema changes). |
 Provider-specific API keys must match `LLM_PROVIDER`.
 
-**Jurisdiction crawl config (database):** each row in `jurisdiction` can set `enabled` (include in weekly job), `crawlUrl` (seed URL), and `lastCrawl*` fields updated by the job. New sites should start with `enabled=false` until a manual crawl looks good.
+**Jurisdiction crawl config (database):** each row in `jurisdiction` can set `enabled` (include in weekly job), `crawlUrl` (seed URL), and `lastCrawl*` fields updated by the job. New sites should start with `enabled=false` until a manual crawl looks good. Full laptop steps (create row → sync → widget demo picker) are in the [root README](../README.md#add-a-jurisdiction-locally).
 
 **CORS:** the app uses `cors()` with default options (reflective / permissive for browser preflight). Chat access is gated by **`WIDGET_ALLOWED_ORIGINS`** in [`src/lib/auth.ts`](src/lib/auth.ts).
 
@@ -320,9 +322,14 @@ After deploying schema changes, run `yarn db:migrate:deploy` (or rely on API ent
 
 ### Onboarding a new jurisdiction
 
-1. Insert `jurisdiction` with `enabled=false`, set `crawlUrl` to the site homepage.
-2. Run one sync: `yarn crawl:sync-all:dev -- --source=<source>` (or local `POST /crawl` when `DISABLE_CRAWL` is not set).
-3. Verify chat search quality, then set `enabled=true`.
+See the [root README](../README.md#add-a-jurisdiction-locally) for the full local walkthrough (JSON sync, crawl, widget demo picker).
+
+1. Add the row to `secrets/jurisdictions.json` (copy from `jurisdictions.json.example` if needed), then `yarn jurisdiction:sync`. Keep `enabled=false` until a crawl looks good.
+2. Run one crawl sync: `CRAWL_SOURCE=<source> yarn crawl:sync-one:dev` (or `yarn crawl:sync-all:dev -- --source=<source>`). An explicit source filter runs even when `enabled=false`. Or use local `POST /crawl` when `DISABLE_CRAWL` is not set.
+3. Verify chat search quality, then set `enabled=true` in the JSON and run `yarn jurisdiction:sync` again.
+4. Local widget switching: set `ENABLE_DEV_ROUTES=true`, open `widget/demo.html`, use **Dev: jurisdiction**.
+
+Removing a jurisdiction from the JSON makes `yarn jurisdiction:sync` warn and cancel unless you type exact `y`.
 
 ### Meeting dumps and RAG
 

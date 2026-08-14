@@ -1,0 +1,24 @@
+{
+  "jurisdictions": [
+    {
+      "source": "chisago_county_mn",
+      "name": "Chisago County",
+      "type": "county",
+      "email": "info@chisagocountymn.gov",
+      "phoneNumber": null,
+      "prompt": "You are a helpful assistant for Chisago County, Minnesota. Answer using the official county website when possible.",
+      "crawlUrl": "https://www.chisagocountymn.gov/",
+      "enabled": true
+    },
+    {
+      "source": "denver_co",
+      "name": "City and County of Denver",
+      "type": "city",
+      "email": "info@denvergov.org",
+      "phoneNumber": null,
+      "prompt": "You are a helpful assistant for the City and County of Denver. Answer using the official website when possible.",
+      "crawlUrl": "https://www.denvergov.org/",
+      "enabled": false
+    }
+  ]
+}

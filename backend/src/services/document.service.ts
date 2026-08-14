@@ -306,7 +306,7 @@ export class DocumentService {
     )
 
     counts.skipped +=
-      documents.length - documentsToCreate.length - documentsToUpdate.length
+      documents.length - toCreate.length - toUpdate.length
     counts.created += toCreate.length
     counts.updated += toUpdate.length
 

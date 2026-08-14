@@ -5,22 +5,327 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Widget demo</title>
   <style>
-    body { 
-      font-family: system-ui, sans-serif; padding: 2rem; margin: 0 auto; }
+    body {
+      font-family: system-ui, sans-serif;
+      padding: 2rem;
+      margin: 0 auto;
+    }
     h1 { margin-top: 0; }
     p { color: #555; line-height: 1.6; }
+
+    .dev-btn {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 2147483646;
+      padding: 6px 10px;
+      font: 12px/1.2 system-ui, sans-serif;
+      color: #1a1a1a;
+      background: #f3f4f6;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .dev-btn:hover { background: #e5e7eb; }
+    .dev-btn:focus-visible {
+      outline: 2px solid #2563eb;
+      outline-offset: 2px;
+    }
+
+    .dev-modal[hidden] { display: none; }
+    .dev-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483647;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .dev-modal__backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+    }
+    .dev-modal__panel {
+      position: relative;
+      width: min(420px, 100%);
+      max-height: min(70vh, 520px);
+      overflow: auto;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
+      padding: 1rem 1rem 1.1rem;
+    }
+    .dev-modal__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+    .dev-modal__header h2 {
+      margin: 0;
+      font-size: 1rem;
+    }
+    .dev-modal__close {
+      border: none;
+      background: transparent;
+      font-size: 1.25rem;
+      line-height: 1;
+      cursor: pointer;
+      color: #6b7280;
+      padding: 0.15rem 0.35rem;
+    }
+    .dev-modal__close:hover { color: #111; }
+    .dev-modal__hint {
+      margin: 0 0 0.75rem;
+      font-size: 0.85rem;
+      color: #6b7280;
+    }
+    .dev-modal__status {
+      margin: 0 0 0.75rem;
+      font-size: 0.85rem;
+      color: #b45309;
+    }
+    .dev-modal__status[data-kind="error"] { color: #b91c1c; }
+    .dev-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .dev-list button {
+      width: 100%;
+      text-align: left;
+      padding: 0.55rem 0.65rem;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      background: #fff;
+      cursor: pointer;
+      font: inherit;
+    }
+    .dev-list button:hover { background: #f9fafb; }
+    .dev-list button[aria-current="true"] {
+      border-color: #2563eb;
+      background: #eff6ff;
+    }
+    .dev-list__name { display: block; font-weight: 600; }
+    .dev-list__meta {
+      display: block;
+      margin-top: 0.15rem;
+      font-size: 0.8rem;
+      color: #6b7280;
+    }
   </style>
 </head>
 <body>
+  <button type="button" class="dev-btn" id="dev-jurisdiction-btn" aria-haspopup="dialog">
+    Dev: jurisdiction
+  </button>
+
+  <div
+    class="dev-modal"
+    id="dev-jurisdiction-modal"
+    hidden
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="dev-jurisdiction-title"
+  >
+    <div class="dev-modal__backdrop" data-close></div>
+    <div class="dev-modal__panel">
+      <div class="dev-modal__header">
+        <h2 id="dev-jurisdiction-title">Pick a jurisdiction</h2>
+        <button type="button" class="dev-modal__close" data-close aria-label="Close">&times;</button>
+      </div>
+      <p class="dev-modal__hint">
+        Lists rows from your local API (<code>GET /dev/jurisdictions</code>).
+        Selection is saved to localStorage and applied on reload.
+      </p>
+      <p class="dev-modal__status" id="dev-jurisdiction-status" hidden></p>
+      <ul class="dev-list" id="dev-jurisdiction-list"></ul>
+    </div>
+  </div>
+
   <script>
-    window.CivicCoreWidget = {
-      source: "chisago_county_mn",
-      name: "Chisago county",
-      widgetUrl: "app/widget.html",
-      apiBaseUrl: "http://localhost:4000",
-      logo: "https://www.chisagocountymn.gov/ImageRepository/Document?documentID=22423",
-      theme: { color: "#8a2561" },
-    };
+    (function () {
+      var STORAGE_KEY = "civiccore.dev.jurisdiction";
+      var DEFAULT_CONFIG = {
+        source: "chisago_county_mn",
+        name: "Chisago county",
+        widgetUrl: "app/widget.html",
+        apiBaseUrl: "http://localhost:4000",
+        logo: "https://www.chisagocountymn.gov/ImageRepository/Document?documentID=22423",
+        theme: { color: "#8a2561" },
+      };
+
+      function readSaved() {
+        try {
+          var raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return null;
+          var parsed = JSON.parse(raw);
+          if (!parsed || typeof parsed.source !== "string" || !parsed.source.trim()) {
+            return null;
+          }
+          return {
+            source: parsed.source.trim(),
+            name: typeof parsed.name === "string" && parsed.name.trim()
+              ? parsed.name.trim()
+              : parsed.source.trim(),
+            type: typeof parsed.type === "string" ? parsed.type : undefined,
+          };
+        } catch (_) {
+          return null;
+        }
+      }
+
+      function writeSaved(jurisdiction) {
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({
+            source: jurisdiction.source,
+            name: jurisdiction.name,
+            type: jurisdiction.type || null,
+          })
+        );
+      }
+
+      var saved = readSaved();
+      window.CivicCoreWidget = Object.assign({}, DEFAULT_CONFIG, saved
+        ? {
+            source: saved.source,
+            name: saved.name,
+            // Avoid carrying another county's logo when switching.
+            logo: saved.source === DEFAULT_CONFIG.source ? DEFAULT_CONFIG.logo : undefined,
+          }
+        : {});
+
+      var btn = document.getElementById("dev-jurisdiction-btn");
+      var modal = document.getElementById("dev-jurisdiction-modal");
+      var listEl = document.getElementById("dev-jurisdiction-list");
+      var statusEl = document.getElementById("dev-jurisdiction-status");
+      var loaded = false;
+
+      function setStatus(message, kind) {
+        if (!message) {
+          statusEl.hidden = true;
+          statusEl.textContent = "";
+          return;
+        }
+        statusEl.hidden = false;
+        statusEl.dataset.kind = kind || "";
+        statusEl.textContent = message;
+      }
+
+      function openModal() {
+        modal.hidden = false;
+        btn.setAttribute("aria-expanded", "true");
+        if (!loaded) {
+          loadJurisdictions();
+        }
+      }
+
+      function closeModal() {
+        modal.hidden = true;
+        btn.setAttribute("aria-expanded", "false");
+        btn.focus();
+      }
+
+      function renderList(jurisdictions) {
+        listEl.innerHTML = "";
+        if (!jurisdictions.length) {
+          setStatus("No jurisdictions in the database yet.", "error");
+          return;
+        }
+
+        var current = window.CivicCoreWidget.source;
+        jurisdictions.forEach(function (j) {
+          var li = document.createElement("li");
+          var button = document.createElement("button");
+          button.type = "button";
+          if (j.source === current) {
+            button.setAttribute("aria-current", "true");
+          }
+
+          var name = document.createElement("span");
+          name.className = "dev-list__name";
+          name.textContent = j.name;
+
+          var meta = document.createElement("span");
+          meta.className = "dev-list__meta";
+          meta.textContent =
+            j.source +
+            " · " +
+            j.type +
+            (j.enabled ? "" : " · disabled") +
+            (j.crawlUrl ? "" : " · no crawlUrl");
+
+          button.appendChild(name);
+          button.appendChild(meta);
+          button.addEventListener("click", function () {
+            writeSaved({ source: j.source, name: j.name, type: j.type });
+            window.location.reload();
+          });
+
+          li.appendChild(button);
+          listEl.appendChild(li);
+        });
+      }
+
+      function loadJurisdictions() {
+        var apiBase = (window.CivicCoreWidget.apiBaseUrl || "http://localhost:4000").replace(
+          /\/$/,
+          ""
+        );
+        setStatus("Loading…");
+        listEl.innerHTML = "";
+
+        fetch(apiBase + "/dev/jurisdictions")
+          .then(function (res) {
+            if (res.status === 404) {
+              throw new Error(
+                "Dev routes are off. Set ENABLE_DEV_ROUTES=true in backend/.env and restart yarn dev."
+              );
+            }
+            if (!res.ok) {
+              return res.json().catch(function () { return {}; }).then(function (body) {
+                throw new Error(
+                  (body && (body.message || body.error)) ||
+                    "Request failed (" + res.status + ")"
+                );
+              });
+            }
+            return res.json();
+          })
+          .then(function (data) {
+            loaded = true;
+            setStatus("");
+            renderList((data && data.jurisdictions) || []);
+          })
+          .catch(function (err) {
+            setStatus(
+              err && err.message
+                ? err.message
+                : "Could not load jurisdictions. Is the API running with ENABLE_DEV_ROUTES=true?",
+              "error"
+            );
+          });
+      }
+
+      btn.addEventListener("click", openModal);
+      modal.addEventListener("click", function (e) {
+        if (e.target && e.target.hasAttribute("data-close")) {
+          closeModal();
+        }
+      });
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && !modal.hidden) {
+          closeModal();
+        }
+      });
+    })();
   </script>
   <script src="cdn/widget.js"></script>
 </body>

@@ -21,6 +21,7 @@
     "crawl:sync-all:dev": "npx ts-node -r dotenv/config src/jobs/sync-jurisdictions.ts",
     "crawl:sync-one": "node dist/src/jobs/sync-jurisdictions.js",
     "crawl:sync-one:dev": "npx ts-node -r dotenv/config src/jobs/sync-jurisdictions.ts",
+    "jurisdiction:sync": "npx ts-node -r dotenv/config src/scripts/sync-jurisdictions-from-json.ts",
     "lint:fix": "eslint src prisma.config.ts --fix",
     "format": "prettier --write \"src/**/*.ts\" \"prisma.config.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"prisma.config.ts\"",

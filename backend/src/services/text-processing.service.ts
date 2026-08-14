@@ -36,6 +36,13 @@ export type ChunkWithMeta = {
 }
 
 export class TextProcessingService {
+  /**
+   * CivicPlus (#pageContent/#content), OpenCities (#main-content/#main),
+   * and generic <main> / [role=main]. Prefer the most specific match first.
+   */
+  private static readonly MAIN_CONTENT_SELECTOR =
+    "#pageContent, #content, #main-content, main, [role='main'], #main"
+
   /** Extract page title from <title> or first <h1>. */
   extractHtmlTitle = ($: any): string | null => {
     const title = $("title").first().text().trim()
@@ -45,7 +52,7 @@ export class TextProcessingService {
   }
 
   extractHtmlText = ($: any): string => {
-    const main = $("#pageContent, #content, main").first()
+    const main = $(TextProcessingService.MAIN_CONTENT_SELECTOR).first()
     if (!main.length) return ""
 
     return main
@@ -64,8 +71,7 @@ export class TextProcessingService {
         .carousel,
         .quicklinks,
         .search,
-        .skip-to-content,
-        [aria-hidden="true"]
+        .skip-to-content
       `,
       )
       .remove()
@@ -80,7 +86,7 @@ export class TextProcessingService {
    * so we can assign a heading to each chunk by position.
    */
   extractHtmlStructured = ($: any): ExtractHtmlStructuredResult | null => {
-    const main = $("#pageContent, #content, main").first()
+    const main = $(TextProcessingService.MAIN_CONTENT_SELECTOR).first()
     if (!main.length) return null
 
     const clone = main
@@ -99,8 +105,7 @@ export class TextProcessingService {
         .carousel,
         .quicklinks,
         .search,
-        .skip-to-content,
-        [aria-hidden="true"]
+        .skip-to-content
       `,
       )
       .remove()
