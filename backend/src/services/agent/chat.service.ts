@@ -1,6 +1,4 @@
 import { ChatOpenAI, type ChatOpenAIFields } from "@langchain/openai"
-import { ChatAnthropic } from "@langchain/anthropic"
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai"
 import { BaseChatModel } from "@langchain/core/language_models/chat_models"
 import {
   BaseMessage,
@@ -11,7 +9,7 @@ import {
   AIMessageChunk,
 } from "@langchain/core/messages"
 import { StructuredToolInterface } from "@langchain/core/tools"
-import { LLMProvider } from "../../lib/types/chat.types"
+import { getLLMProvider, LLMProvider } from "../../lib/types/chat.types"
 import type { ChatSource } from "../../lib/types/chat-source.types"
 import { createLogger, isProductionLogging, safeLogText } from "../../lib/logger"
 import { createSearchWebsiteDocumentsTool } from "./tools/search-website-documents"
@@ -101,7 +99,7 @@ export class ChatService {
   constructor(source: string, systemPrompt: string) {
     this.source = source
     this.systemPrompt = systemPrompt
-    this.provider = (process.env.LLM_PROVIDER as LLMProvider) || "openai"
+    this.provider = getLLMProvider()
     this.model = process.env.LLM_MODEL
     this.sourcesCollector = new SourcesCollector()
     this.searchTool = createSearchWebsiteDocumentsTool(source, {
@@ -116,7 +114,6 @@ export class ChatService {
 
   private createLLM(): BoundLLM {
     const model = this.model
-    const temperature = parseFloat(process.env.LLM_TEMPERATURE || "0.7")
     const maxTokens = parseInt(process.env.LLM_MAX_TOKENS || "1000", 10)
     const reasoningEffort = (
       process.env.LLM_REASONING_EFFORT || "none"
@@ -128,50 +125,25 @@ export class ChatService {
       )
     }
 
-    let llm: BaseChatModel
-    switch (this.provider) {
-      case "openai": {
-        const openaiOpts: ChatOpenAIFields = {
-          model,
-          maxCompletionTokens: maxTokens,
-          useResponsesApi: true,
-        }
-        if (
-          reasoningEffort &&
-          reasoningEffort !== "default" &&
-          ["none", "minimal", "low", "medium", "high", "xhigh"].includes(
-            reasoningEffort,
-          )
-        ) {
-          openaiOpts.reasoning = {
-            effort: reasoningEffort as NonNullable<
-              ChatOpenAIFields["reasoning"]
-            >["effort"],
-          }
-        }
-        llm = new ChatOpenAI(openaiOpts)
-        break
-      }
-
-      case "anthropic":
-        llm = new ChatAnthropic({
-          modelName: model,
-          temperature,
-          maxTokens,
-        })
-        break
-
-      case "google":
-        llm = new ChatGoogleGenerativeAI({
-          model,
-          temperature,
-          maxOutputTokens: maxTokens,
-        })
-        break
-
-      default:
-        throw new Error(`Unsupported LLM provider: ${this.provider}`)
+    const openaiOpts: ChatOpenAIFields = {
+      model,
+      maxCompletionTokens: maxTokens,
+      useResponsesApi: true,
     }
+    if (
+      reasoningEffort &&
+      reasoningEffort !== "default" &&
+      ["none", "minimal", "low", "medium", "high", "xhigh"].includes(
+        reasoningEffort,
+      )
+    ) {
+      openaiOpts.reasoning = {
+        effort: reasoningEffort as NonNullable<
+          ChatOpenAIFields["reasoning"]
+        >["effort"],
+      }
+    }
+    const llm: BaseChatModel = new ChatOpenAI(openaiOpts)
 
     const tools = [this.searchTool]
     if (

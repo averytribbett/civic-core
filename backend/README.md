@@ -54,11 +54,9 @@ Set these in `.env` locally, or in the Cloud Run service (or Secret Manager) for
 | `DATABASE_URL` | Yes | PostgreSQL connection string (SSL as required by your host, e.g. Supabase) |
 | `PORT` | No | HTTP port. Defaults to **4000** locally. **Cloud Run sets this automatically** (usually `8080`) |
 | `LLM_TEMPERATURE` | No | Sampling temperature (default `0.7`). Ignored for gpt-5 / o-series (those models reject it). |
-| `LLM_PROVIDER` | No | `openai`, `anthropic`, or `google` (default `openai`) |
+| `LLM_PROVIDER` | No | `openai` (default `openai`) |
 | `LLM_REASONING_EFFORT` | No | GPT-5.x only: `none` (default), `minimal`, `low`, `medium`, `high`, `xhigh` — lower is faster. Chat uses the OpenAI Responses API so tools work with non-`none` effort. |
 | `OPENAI_API_KEY` | Yes (embeddings; chat if OpenAI) | OpenAI API key |
-| `ANTHROPIC_API_KEY` | If using Anthropic | Anthropic API key |
-| `GOOGLE_API_KEY` | If using Google | Google GenAI API key |
 | `WIDGET_ALLOWED_ORIGINS` | **Yes** (for `/chat`) | Comma-separated **origins** where `widget.html` is hosted (iframe `fetch` uses this origin). Example: `https://civic-core-widget.web.app,https://app.civiccore.ai`. For Live Server, add `http://127.0.0.1:5500`. If unset or empty, chat returns **503**. |
 | `MESSAGE_ENCRYPTION_KEY` | No | Optional message encryption |
 | `DISABLE_CRAWL` | No | Set to **`true`** on the **API** Cloud Run service to turn off **`/crawl`** and never load **crawlee**. The weekly sync uses a separate Cloud Run **Job**, not this route. |

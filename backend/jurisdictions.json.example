@@ -11,8 +11,8 @@
       "enabled": true
     },
     {
-      "source": "denver_co",
-      "name": "City and County of Denver",
+      "source": "denver_city_co",
+      "name": "Denver",
       "type": "city",
       "email": "info@denvergov.org",
       "phoneNumber": null,
