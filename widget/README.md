@@ -79,9 +79,15 @@ Set **`WIDGET_ALLOWED_ORIGINS`** on the API (comma-separated origins where `widg
 
 Express uses permissive **`cors()`** (no origin allowlist at the middleware layer); **`requireOrigin`** enforces the widget list for `POST /chat` and vote routes.
 
-### Terms link
+### Legal & compliance
 
-[`app/widget.html`](app/widget.html) links to `/terms` on the widget host. Host a small terms page there or change the link later to a full URL.
+The chat footer links to [`app/legal.html`](app/legal.html), a compliance hub with:
+
+- [`terms.html`](app/terms.html) — Widget Terms of Service (residents)
+- [`privacy.html`](app/privacy.html) — Chat Privacy Notice
+- [`subprocessors.html`](app/subprocessors.html) — Subprocessor list
+
+The marketing site has separate policies at `https://civiccore.ai/privacy` and `/terms`. Client contracts (DPA, MSA) are provided directly to government customers, not on this public hub.
 
 ### Accessibility (WCAG 2.1 AA)
 

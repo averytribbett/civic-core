@@ -19,7 +19,7 @@ export function Header() {
     >
       <div className="site-header__brand">
         <LogoMark className="site-header__logo" />
-        <a href="#" className="site-header__name">
+        <a href="/" className="site-header__name">
           Civic Core
         </a>
       </div>
