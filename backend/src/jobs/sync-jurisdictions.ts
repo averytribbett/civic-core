@@ -42,7 +42,8 @@ async function syncOneJurisdiction(jurisdiction: {
 
   const result = await runCrawlSync({
     url: crawlUrl,
-    source: jurisdiction.source,
+    jurisdictionId: jurisdiction.id,
+    logSource: jurisdiction.source,
   })
 
   await prisma.jurisdiction.update({

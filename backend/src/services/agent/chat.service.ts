@@ -9,7 +9,6 @@ import {
   AIMessageChunk,
 } from "@langchain/core/messages"
 import { StructuredToolInterface } from "@langchain/core/tools"
-import { getLLMProvider, LLMProvider } from "../../lib/types/chat.types"
 import type { ChatSource } from "../../lib/types/chat-source.types"
 import { createLogger, isProductionLogging, safeLogText } from "../../lib/logger"
 import { createSearchWebsiteDocumentsTool } from "./tools/search-website-documents"
@@ -57,9 +56,8 @@ function messageContentToString(content: unknown): string {
 
 export class ChatService {
   private llm: BoundLLM
-  private provider: LLMProvider
   private model?: string
-  private readonly source: string
+  private readonly logSource: string
   private readonly systemPrompt: string
   private searchTool: StructuredToolInterface
   private sourcesCollector: SourcesCollector
@@ -96,14 +94,14 @@ export class ChatService {
     return out
   }
 
-  constructor(source: string, systemPrompt: string) {
-    this.source = source
+  constructor(jurisdictionId: string, systemPrompt: string, logSource?: string) {
+    this.logSource = logSource ?? jurisdictionId
     this.systemPrompt = systemPrompt
-    this.provider = getLLMProvider()
     this.model = process.env.LLM_MODEL
     this.sourcesCollector = new SourcesCollector()
-    this.searchTool = createSearchWebsiteDocumentsTool(source, {
+    this.searchTool = createSearchWebsiteDocumentsTool(jurisdictionId, {
       getCollector: () => this.sourcesCollector,
+      logSource: this.logSource,
     })
     this.llm = this.createLLM()
   }
@@ -180,7 +178,7 @@ export class ChatService {
     const toolCalls = aiMessage.tool_calls || []
     if (toolCalls.length === 0) return []
 
-    const log = createLogger("tools", this.source)
+    const log = createLogger("tools", this.logSource)
     const toolNames = toolCalls.map((c) => c.name || "unknown").join(", ")
     log.info(`Executing ${toolCalls.length} tool call(s): ${toolNames}`)
 
@@ -289,7 +287,7 @@ export class ChatService {
       }
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error))
-      createLogger("chat", this.source).error("Error in chat service:", err)
+      createLogger("chat", this.logSource).error("Error in chat service:", err)
       throw new Error(`Chat service error: ${err.message}`)
     }
   }

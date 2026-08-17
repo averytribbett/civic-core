@@ -10,17 +10,19 @@ import type { SourcesCollector } from "../sources-collector"
 export type SearchToolOptions = {
   /** Called at invoke time so the collector can be reset per chat turn. */
   getCollector?: () => SourcesCollector | undefined
+  /** Slug for logs only. */
+  logSource?: string
 }
 
 /**
- * Creates the search_website_documents tool, optionally scoped to a document source.
- * When source is provided, only chunks from documents with that source are returned (e2e consistency with chat source).
+ * Creates the search_website_documents tool, optionally scoped to a jurisdiction.
+ * When jurisdictionId is provided, only chunks from that jurisdiction's documents are returned.
  */
 export function createSearchWebsiteDocumentsTool(
-  source?: string,
+  jurisdictionId?: string,
   options?: SearchToolOptions,
 ) {
-  const log = createLogger("tools", source)
+  const log = createLogger("tools", options?.logSource)
   return new DynamicStructuredTool({
     name: "search_website_documents",
     description:
@@ -41,7 +43,9 @@ export function createSearchWebsiteDocumentsTool(
             ? `query=${JSON.stringify(queryPreview)}`
             : "query=(empty)"
         log.info(`search_website_documents embedding ${queryLog}`)
-        const chunks = await retrieveWebsiteDocuments(query, source)
+        const chunks = await retrieveWebsiteDocuments(query, jurisdictionId, {
+          logSource: options?.logSource,
+        })
         if (chunks.length === 0) {
           log.info(`search_website_documents: no documents found for ${queryLog}`)
         } else {
@@ -62,5 +66,5 @@ export function createSearchWebsiteDocumentsTool(
   })
 }
 
-/** Singleton tool with no source filter (for backward compatibility / global search). */
+/** Singleton tool with no jurisdiction filter (for backward compatibility / global search). */
 export const searchWebsiteDocumentsTool = createSearchWebsiteDocumentsTool()

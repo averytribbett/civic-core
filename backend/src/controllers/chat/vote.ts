@@ -61,7 +61,7 @@ export const voteMessage = async (req: Request, res: Response) => {
     const conversation = await prisma.conversation.findUnique({
       where: { id: message.conversationId },
     })
-    if (!conversation || conversation.source !== source) {
+    if (!conversation || conversation.jurisdictionId !== req.jurisdiction.id) {
       return res.status(403).json({
         error: "Access denied",
         message: "Message does not belong to this source",

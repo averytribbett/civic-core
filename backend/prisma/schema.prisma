@@ -33,7 +33,7 @@ enum DocumentKind {
 
 model Jurisdiction {
   id            String @id @default(uuid())
-  /// Widget/API source slug (e.g. chisago_county_mn); matches Conversation.source and Document.source
+  /// Widget/API source slug (e.g. chisago_county_mn); external tenant identifier only
   source        String            @unique
   name          String
   type          JurisdictionType
@@ -48,6 +48,9 @@ model Jurisdiction {
   lastCrawlStatus String?
   lastCrawlError  String?         @db.Text
 
+  documents     Document[]
+  conversations Conversation[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -56,22 +59,23 @@ model Jurisdiction {
 }
 
 model Document {
-  id          String   @id @default(uuid())
-  url         String   @unique
-  title       String?
-  source      String?  // Jurisdiction.source slug (e.g. chisago_county_mn)
-  hash        String?  // for change detection
+  id             String       @id @default(uuid())
+  jurisdictionId String
+  jurisdiction   Jurisdiction @relation(fields: [jurisdictionId], references: [id], onDelete: Restrict)
+  url            String       @unique
+  title          String?
+  hash           String?      // for change detection
   /// MIME from crawl (e.g. text/html, application/pdf)
-  mimeType    String?
+  mimeType       String?
   /// Classified at crawl for RAG soft penalties / meeting-dump gating
-  docKind     DocumentKind?
+  docKind        DocumentKind?
 
-  chunks      Chunk[]
+  chunks         Chunk[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([source])
+  @@index([jurisdictionId])
   @@index([docKind])
 
   // Table name
@@ -105,13 +109,14 @@ model Chunk {
 
 // Chat persistence: one conversation per thread, messages in order
 model Conversation {
-  id        String    @id @default(uuid())
-  source    String    // Jurisdiction.source slug (e.g. chisago_county_mn)
-  messages  Message[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id             String       @id @default(uuid())
+  jurisdictionId String
+  jurisdiction   Jurisdiction @relation(fields: [jurisdictionId], references: [id], onDelete: Restrict)
+  messages       Message[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
-  @@index([source])
+  @@index([jurisdictionId])
   @@map("conversations")
 }
 

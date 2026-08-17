@@ -13,7 +13,9 @@ import { createLogger } from "../lib/logger"
 
 export type RunCrawlSyncInput = {
   url: string
-  source: string
+  jurisdictionId: string
+  /** Slug for logs only (optional). */
+  logSource?: string
 }
 
 export type RunCrawlSyncResult = UpsertDocumentsResult & {
@@ -176,7 +178,7 @@ export class CrawlIngestPipeline {
   }
 
   constructor(
-    private readonly source: string,
+    private readonly jurisdictionId: string,
     private readonly batchSize: number,
     /** Canonical URLs successfully queued for ingest (one row per page). */
     private readonly crawledPageUrls: Set<string>,
@@ -201,7 +203,7 @@ export class CrawlIngestPipeline {
     if (this.buffer.length === 0) return
     const batch = this.buffer.splice(0, this.buffer.length)
     const result = await this.documentService.upsertDocumentsBatch(
-      { source: this.source, documents: batch },
+      { jurisdictionId: this.jurisdictionId, documents: batch },
       this.existingByUrl,
     )
     this.totals.created += result.created
@@ -212,7 +214,7 @@ export class CrawlIngestPipeline {
   async finalize(): Promise<UpsertDocumentsResult> {
     await this.flush()
     this.totals.deleted = await this.documentService.deleteStaleDocuments(
-      this.source,
+      this.jurisdictionId,
       this.crawledPageUrls,
     )
     return { ...this.totals }
@@ -226,13 +228,13 @@ export async function runCrawlSync(
   input: RunCrawlSyncInput,
 ): Promise<RunCrawlSyncResult> {
   const startTime = Date.now()
-  const { url, source } = input
+  const { url, jurisdictionId, logSource } = input
 
   if (!url?.trim()) {
     throw new Error("crawlUrl is required")
   }
-  if (!source?.trim()) {
-    throw new Error("source is required")
+  if (!jurisdictionId?.trim()) {
+    throw new Error("jurisdictionId is required")
   }
 
   const allowedHostname = parseAllowedHostname(url)
@@ -240,11 +242,11 @@ export async function runCrawlSync(
   const urlRegistry = new CrawlUrlRegistry()
   const crawledPageUrls = new Set<string>()
   const pipeline = new CrawlIngestPipeline(
-    source,
+    jurisdictionId,
     PIPELINE_BATCH_SIZE,
     crawledPageUrls,
   )
-  const log = createLogger("crawl", source)
+  const log = createLogger("crawl", logSource)
   let pageFailures = 0
   let meetingDumpSkipped = 0
   let emptyTextSkipped = 0

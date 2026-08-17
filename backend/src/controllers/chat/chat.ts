@@ -13,7 +13,7 @@ function writeSse(res: Response, event: string, data: unknown) {
 }
 
 async function persistChatTurn(opts: {
-  source: string
+  jurisdictionId: string
   existingConversationId: string | null
   message: string
   response: string
@@ -27,13 +27,13 @@ async function persistChatTurn(opts: {
   let conversationId = opts.existingConversationId
   if (conversationId) {
     const existing = await prisma.conversation.findFirst({
-      where: { id: conversationId, source: opts.source },
+      where: { id: conversationId, jurisdictionId: opts.jurisdictionId },
     })
     if (!existing) conversationId = null
   }
   if (!conversationId) {
     const created = await prisma.conversation.create({
-      data: { source: opts.source },
+      data: { jurisdictionId: opts.jurisdictionId },
     })
     conversationId = created.id
   }
@@ -125,7 +125,11 @@ export const chat = async (req: Request, res: Response) => {
     const systemPrompt = renderSystemPrompt(jurisdiction.prompt, {
       date: new Date(),
     })
-    const chatService = new ChatService(source, systemPrompt)
+    const chatService = new ChatService(
+      jurisdiction.id,
+      systemPrompt,
+      jurisdiction.source,
+    )
     const language =
       typeof rawLanguage === "string" && rawLanguage.trim()
         ? rawLanguage.trim().slice(0, 16)
@@ -173,7 +177,7 @@ export const chat = async (req: Request, res: Response) => {
 
         const responseTime = Date.now() - startTime
         const persisted = await persistChatTurn({
-          source,
+          jurisdictionId: jurisdiction.id,
           existingConversationId: conversationIdRaw,
           message,
           response: complete.response,
@@ -216,7 +220,7 @@ export const chat = async (req: Request, res: Response) => {
     const responseTime = Date.now() - startTime
 
     const persisted = await persistChatTurn({
-      source,
+      jurisdictionId: jurisdiction.id,
       existingConversationId: conversationIdRaw,
       message,
       response,

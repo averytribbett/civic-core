@@ -36,7 +36,7 @@ test("CrawlIngestPipeline deduplicates crawled pages by normalized URL", async (
   const crawledPageUrls = new Set<string>()
   const documentService = new FakeDocumentService()
   const pipeline = new CrawlIngestPipeline(
-    "test_source",
+    "00000000-0000-4000-8000-000000000001",
     10,
     crawledPageUrls,
     documentService,
@@ -56,6 +56,10 @@ test("CrawlIngestPipeline deduplicates crawled pages by normalized URL", async (
   const result = await pipeline.finalize()
 
   assert.equal(documentService.batches.length, 1)
+  assert.equal(
+    documentService.batches[0]?.jurisdictionId,
+    "00000000-0000-4000-8000-000000000001",
+  )
   assert.deepEqual(
     documentService.batches[0]?.documents.map((doc) => doc.url),
     ["https://example.gov/agenda"],

@@ -27,7 +27,7 @@ export type RetrievedChunk = {
     id: string
     url: string
     title: string | null
-    source: string | null
+    jurisdictionId: string
     mimeType: string | null
     docKind: DocumentKind | null
   }
@@ -41,7 +41,7 @@ export type RetrievedChunk = {
  */
 export async function retrieveWebsiteDocuments(
   query: string,
-  source?: string,
+  jurisdictionId?: string,
   options?: {
     similarityThreshold?: number
     chunkLimit?: number
@@ -49,6 +49,8 @@ export async function retrieveWebsiteDocuments(
     maxChunksPerDocument?: number
     /** Override meeting-dump gate; default is derived from isMeetingIntentQuery(query). */
     excludeMeetingDumps?: boolean
+    /** Slug for logs only. */
+    logSource?: string
   },
 ): Promise<RetrievedChunk[]> {
   const similarityThreshold =
@@ -69,7 +71,7 @@ export async function retrieveWebsiteDocuments(
     queryEmbedding,
     vectorLimit,
     similarityThreshold,
-    source ?? undefined,
+    jurisdictionId ?? undefined,
     { excludeMeetingDumps },
   )
 
@@ -78,7 +80,7 @@ export async function retrieveWebsiteDocuments(
     maxChunksPerDocument,
   })
 
-  const log = createLogger("retrieve", source)
+  const log = createLogger("retrieve", options?.logSource)
   const queryPreview = safeLogText(query, 200)
   const queryLog = isProductionLogging()
     ? "query=(redacted)"
@@ -111,7 +113,7 @@ export async function retrieveWebsiteDocuments(
 
   const adjacentChunks = await documentService.getChunksByDocumentAndIndices(
     pairs,
-    source ?? undefined,
+    jurisdictionId ?? undefined,
   )
 
   const byKey = new Map<string, RetrievedChunk>()

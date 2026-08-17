@@ -26,7 +26,7 @@ type DocWithChunks = {
 }
 
 export type UpsertDocumentInput = {
-  source: string
+  jurisdictionId: string
   documents: {
     url: string
     text: string
@@ -50,7 +50,7 @@ export type SimilarChunkResult = {
     id: string
     url: string
     title: string | null
-    source: string | null
+    jurisdictionId: string
     mimeType: string | null
     docKind: DocumentKind | null
   }
@@ -102,7 +102,7 @@ export class DocumentService {
    * @param queryEmbedding - The embedding vector of the query (number[])
    * @param limit - Maximum number of chunks to return (default: 5)
    * @param similarityThreshold - Minimum cosine similarity threshold (default: 0.5)
-   * @param source - Optional source filter to limit search to specific document source
+   * @param jurisdictionId - Optional jurisdiction filter to limit search scope
    * @param options.excludeMeetingDumps - When true (default), exclude agenda/minutes
    *   docKind so service pages can enter the candidate set
    * @returns Array of chunks with their similarity scores and document metadata
@@ -111,7 +111,7 @@ export class DocumentService {
     queryEmbedding: number[],
     limit: number = 5,
     similarityThreshold: number = 0.5,
-    source?: string,
+    jurisdictionId?: string,
     options?: { excludeMeetingDumps?: boolean },
   ): Promise<SimilarChunkResult[]> {
     try {
@@ -134,7 +134,7 @@ export class DocumentService {
           d.id as "documentId",
           d.url as "documentUrl",
           d.title as "documentTitle",
-          d.source as "documentSource",
+          d."jurisdictionId" as "documentJurisdictionId",
           d."mimeType" as "documentMimeType",
           d."docKind" as "documentDocKind"
         FROM "chunks" c
@@ -145,9 +145,9 @@ export class DocumentService {
       const params: any[] = [embeddingSql, similarityThreshold]
       let paramIndex = 3
 
-      if (source) {
-        query += ` AND d.source = $${paramIndex}`
-        params.push(source)
+      if (jurisdictionId) {
+        query += ` AND d."jurisdictionId" = $${paramIndex}`
+        params.push(jurisdictionId)
         paramIndex++
       }
 
@@ -170,7 +170,7 @@ export class DocumentService {
           documentId: string
           documentUrl: string
           documentTitle: string | null
-          documentSource: string | null
+          documentJurisdictionId: string
           documentMimeType: string | null
           documentDocKind: DocumentKind | null
         }>
@@ -188,7 +188,7 @@ export class DocumentService {
           id: row.documentId,
           url: row.documentUrl,
           title: row.documentTitle,
-          source: row.documentSource,
+          jurisdictionId: row.documentJurisdictionId,
           mimeType: row.documentMimeType,
           docKind: row.documentDocKind,
         },
@@ -205,7 +205,7 @@ export class DocumentService {
    */
   async getChunksByDocumentAndIndices(
     pairs: Array<{ documentId: string; chunkIndex: number }>,
-    source?: string,
+    jurisdictionId?: string,
   ): Promise<SimilarChunkResult[]> {
     if (pairs.length === 0) return []
     const seen = new Set<string>()
@@ -221,7 +221,7 @@ export class DocumentService {
           documentId: p.documentId,
           chunkIndex: p.chunkIndex,
         })),
-        ...(source ? { document: { source } } : {}),
+        ...(jurisdictionId ? { document: { jurisdictionId } } : {}),
       },
       include: { document: true },
       orderBy: [{ documentId: "asc" }, { chunkIndex: "asc" }],
@@ -238,7 +238,7 @@ export class DocumentService {
         id: c.document.id,
         url: c.document.url,
         title: c.document.title,
-        source: c.document.source,
+        jurisdictionId: c.document.jurisdictionId,
         mimeType: c.document.mimeType,
         docKind: c.document.docKind as DocumentKind | null,
       },
@@ -315,7 +315,7 @@ export class DocumentService {
         const created = await tx.document.create({
           data: {
             url: this.sanitizeTextForDb(doc.url) ?? doc.url,
-            source: this.sanitizeTextForDb(input.source) ?? input.source,
+            jurisdictionId: input.jurisdictionId,
             title: this.sanitizeTextForDb(doc.title ?? null),
             hash: this.sanitizeTextForDb(hash) ?? hash,
             mimeType: this.sanitizeTextForDb(doc.mimeType ?? null),
@@ -334,6 +334,7 @@ export class DocumentService {
         await tx.document.update({
           where: { id: existing.id },
           data: {
+            jurisdictionId: input.jurisdictionId,
             hash: this.sanitizeTextForDb(hash) ?? hash,
             title: this.sanitizeTextForDb(doc.title ?? null),
             mimeType: this.sanitizeTextForDb(doc.mimeType ?? null),
@@ -351,6 +352,7 @@ export class DocumentService {
         await tx.document.update({
           where: { id: existing.id },
           data: {
+            jurisdictionId: input.jurisdictionId,
             title: this.sanitizeTextForDb(doc.title ?? null),
             mimeType: this.sanitizeTextForDb(doc.mimeType ?? null),
             docKind: doc.docKind ?? null,
@@ -375,13 +377,13 @@ export class DocumentService {
     return { ...doc, mimeType, docKind }
   }
 
-  /** Remove documents for `source` whose URLs were not seen in the completed crawl. */
+  /** Remove documents for a jurisdiction whose URLs were not seen in the completed crawl. */
   async deleteStaleDocuments(
-    source: string,
+    jurisdictionId: string,
     crawledUrls: Set<string>,
   ): Promise<number> {
     const allDocumentsForSource = await this.prisma.document.findMany({
-      where: { source },
+      where: { jurisdictionId },
       select: { id: true, url: true },
     })
     const idsToDelete = allDocumentsForSource
@@ -409,7 +411,7 @@ export class DocumentService {
     for (let i = 0; i < input.documents.length; i += DOCUMENT_BATCH_SIZE) {
       const batch = input.documents.slice(i, i + DOCUMENT_BATCH_SIZE)
       const result = await this.upsertDocumentsBatch(
-        { source: input.source, documents: batch },
+        { jurisdictionId: input.jurisdictionId, documents: batch },
         existingByUrl,
       )
       totals.created += result.created
@@ -418,7 +420,7 @@ export class DocumentService {
     }
 
     totals.deleted = await this.deleteStaleDocuments(
-      input.source,
+      input.jurisdictionId,
       new Set(input.documents.map((d) => d.url)),
     )
     return totals

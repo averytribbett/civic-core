@@ -1,6 +1,4 @@
 import "dotenv/config"
-import { createInterface } from "node:readline/promises"
-import { stdin as input, stdout as output } from "node:process"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
 import { z } from "zod"
@@ -45,29 +43,6 @@ function resolveFilePath(argv: string[]): string {
     if (value) return path.resolve(process.cwd(), value)
   }
   return DEFAULT_FILE
-}
-
-async function confirmDeletes(sources: string[]): Promise<boolean> {
-  console.warn("")
-  console.warn(
-    "WARNING: The following jurisdictions exist in the database but are missing from the JSON file.",
-  )
-  console.warn(
-    "Continuing will DELETE these rows from jurisdiction (documents/conversations for those sources are not deleted).",
-  )
-  for (const source of sources) {
-    console.warn(`  - ${source}`)
-  }
-  console.warn("")
-  console.warn('Type y to delete them and continue. Anything else cancels (default).')
-
-  const rl = createInterface({ input, output })
-  try {
-    const answer = (await rl.question("> ")).trim()
-    return answer === "y"
-  } finally {
-    rl.close()
-  }
 }
 
 async function loadFile(filePath: string): Promise<JurisdictionInput[]> {
@@ -137,27 +112,25 @@ async function main(): Promise<void> {
 
   const toCreate = desired.filter((j) => !existingBySource.has(j.source))
   const toUpdate = desired.filter((j) => existingBySource.has(j.source))
-  const toDelete = existing.filter((j) => !desiredBySource.has(j.source))
+  const skippedInDb = existing.filter((j) => !desiredBySource.has(j.source))
 
   console.log(
-    `Plan: create=${toCreate.length} update=${toUpdate.length} delete=${toDelete.length}`,
+    `Plan: create=${toCreate.length} update=${toUpdate.length} skipped_in_db=${skippedInDb.length}`,
   )
 
-  if (toDelete.length > 0) {
-    const confirmed = await confirmDeletes(toDelete.map((j) => j.source))
-    if (!confirmed) {
-      console.log("Cancelled. No changes were made.")
-      return
+  if (skippedInDb.length > 0) {
+    console.warn("")
+    console.warn(
+      "WARNING: The following jurisdictions exist in the database but are missing from the JSON file.",
+    )
+    console.warn("They will be left untouched (no delete).")
+    for (const row of skippedInDb) {
+      console.warn(`  - ${row.source}`)
     }
+    console.warn("")
   }
 
   await prisma.$transaction(async (tx) => {
-    if (toDelete.length > 0) {
-      await tx.jurisdiction.deleteMany({
-        where: { source: { in: toDelete.map((j) => j.source) } },
-      })
-    }
-
     for (const row of toCreate) {
       await tx.jurisdiction.create({
         data: {
@@ -181,9 +154,6 @@ async function main(): Promise<void> {
   }
   if (toUpdate.length > 0) {
     console.log(`Updated: ${toUpdate.map((j) => j.source).join(", ")}`)
-  }
-  if (toDelete.length > 0) {
-    console.log(`Deleted: ${toDelete.map((j) => j.source).join(", ")}`)
   }
 }
 

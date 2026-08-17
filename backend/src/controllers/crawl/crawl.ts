@@ -1,5 +1,6 @@
 import { Request, Response } from "express"
 import { runCrawlSync } from "../../services/crawl-sync.service"
+import { prisma } from "../../lib/prisma"
 import { createLogger } from "../../lib/logger"
 
 export const crawl = async (req: Request, res: Response) => {
@@ -27,7 +28,21 @@ export const crawl = async (req: Request, res: Response) => {
       })
     }
 
-    const upsertResult = await runCrawlSync({ url, source })
+    const jurisdiction = await prisma.jurisdiction.findUnique({
+      where: { source },
+    })
+    if (!jurisdiction) {
+      return res.status(404).json({
+        error: "Unknown source",
+        message: `No jurisdiction found for source "${source}"`,
+      })
+    }
+
+    const upsertResult = await runCrawlSync({
+      url,
+      jurisdictionId: jurisdiction.id,
+      logSource: jurisdiction.source,
+    })
 
     const totalTimeMs = Date.now() - startTime
     const totalTimeSeconds = (totalTimeMs / 1000).toFixed(2)

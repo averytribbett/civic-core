@@ -3,9 +3,16 @@ import assert from "node:assert/strict"
 import { SourcesCollector, buildSourceHref } from "../src/services/agent/sources-collector"
 import type { RetrievedChunk } from "../src/services/agent/retrieve-documents"
 
-function fakeChunk(
-  overrides: Partial<RetrievedChunk> & { id: string; url: string },
-): RetrievedChunk {
+const TEST_JURISDICTION_ID = "00000000-0000-4000-8000-000000000001"
+
+type FakeChunkOverrides = Omit<Partial<RetrievedChunk>, "document"> & {
+  id: string
+  url: string
+  document?: Partial<RetrievedChunk["document"]>
+}
+
+function fakeChunk(overrides: FakeChunkOverrides): RetrievedChunk {
+  const doc = overrides.document ?? {}
   return {
     id: overrides.id,
     chunkIndex: overrides.chunkIndex ?? 0,
@@ -15,12 +22,12 @@ function fakeChunk(
     pageEnd: overrides.pageEnd ?? null,
     similarity: overrides.similarity ?? 0.9,
     document: {
-      id: overrides.document?.id ?? "doc-1",
+      id: doc.id ?? "doc-1",
       url: overrides.url,
-      title: overrides.document?.title ?? "Clerk Hours",
-      source: "test",
-      mimeType: overrides.document?.mimeType ?? "text/html",
-      docKind: overrides.document?.docKind ?? "html_page",
+      title: doc.title ?? "Clerk Hours",
+      jurisdictionId: doc.jurisdictionId ?? TEST_JURISDICTION_ID,
+      mimeType: doc.mimeType ?? "text/html",
+      docKind: doc.docKind ?? "html_page",
     },
   }
 }
