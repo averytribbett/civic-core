@@ -2,12 +2,12 @@
 
 ## Deploy (Firebase Hosting)
 
-Use a **dedicated Firebase project** for the widget (separate from the marketing site). That project’s **default** Hosting site serves `widget.js` and `app/*`; nothing special is required in `firebase.json`.
+Use a **dedicated Firebase project** for the widget (separate from the marketing site). That project’s **default** Hosting site serves `widget.js` and `app/*`.
 
 1. [Firebase CLI](https://firebase.google.com/docs/cli): `firebase login`
 2. Create a Firebase project (or pick an existing one used only for the widget).
 3. From `widget/`: `cp .firebaserc.example .firebaserc` and set `YOUR_FIREBASE_PROJECT_ID` to that project’s id.
-4. **Custom domain** (optional, e.g. `app.civiccore.ai`): Firebase Console → **Build → Hosting** → connect domain; add the DNS records your registrar shows (same idea as any static site).
+4. **Custom domain** (optional, e.g. `app.civiccore.ai`): Firebase Console → **Build → Hosting** → connect domain; add the DNS records your registrar shows.
 5. Deploy: `yarn deploy:hosting` (runs `prepare-hosting`, `verify:hosting`, then `firebase deploy --only hosting`).
 
 After deploy, the shell is at:
@@ -18,103 +18,115 @@ After deploy, the shell is at:
 
 ### Not using Firebase?
 
-You can still ship the same files: run `yarn prepare-hosting`, then upload everything under `hosting/public/` to any HTTPS static host. For Google Cloud Storage + bucket hosting, see [`scripts/deploy-gcs.example.sh`](scripts/deploy-gcs.example.sh). Do not set `X-Frame-Options` / CSP in a way that blocks embedding `widget.html` on client sites.
+Run `yarn prepare-hosting`, then upload everything under `hosting/public/` to any HTTPS static host. For Google Cloud Storage bucket hosting, see [`scripts/deploy-gcs.example.sh`](scripts/deploy-gcs.example.sh). Do not set `X-Frame-Options` / CSP in a way that blocks embedding `widget.html` on client sites.
 
-## Local development
+---
 
-Point `widgetUrl` at the shell on the same origin as your static server (e.g. Live Server), and set `apiBaseUrl` to your API.
+## Embed snippet
+
+The embed only needs **`source`** and **`apiBaseUrl`**. Logo, display name, and theme color are loaded from the backend (`GET /widget/branding`) using the jurisdiction row in Postgres.
 
 ```html
 <script>
   window.CivicCoreWidget = {
-    widgetUrl: "app/widget.html",
-    apiBaseUrl: "http://localhost:4000",
     source: "chisago_county_mn",
-    theme: { color: "#2563eb" },
-  };
-</script>
-<script src="cdn/widget.js"></script>
-```
-
-See [`demo.html`](demo.html) for a fuller example (`name`, `logo`, etc.).
-
-### Switching jurisdictions in `demo.html`
-
-With the API running and **`ENABLE_DEV_ROUTES=true`** in `backend/.env`, open `demo.html` and use **Dev: jurisdiction** to pick any row from `GET /dev/jurisdictions`. The choice is stored in `localStorage` (`civiccore.dev.jurisdiction`) and restored on reload. Full onboarding steps: [root README](../README.md#add-a-jurisdiction-locally).
-
-### Config fields
-
-- **apiBaseUrl**: Base URL of the backend (e.g. `https://your-api-xxxxx.run.app`). Required unless the widget shell is same-origin as the API.
-- **source**: Sent as `source` on `POST /chat`. Must match a `jurisdiction.source` value in your database.
-- **widgetUrl** (recommended for production): Full HTTPS URL of `widget.html` (see below). If omitted, the launcher defaults to `https://app.civiccore.com/widget.html` ([`cdn/widget.js`](cdn/widget.js)).
-- **name**, **logo**, **theme**, **align**: Optional branding and launcher position (`left` | `right`).
-
-## Production layout (single origin)
-
-Self-hosting uses one origin: launcher at **`/widget.js`**, shell at **`/app/widget.html`**, plus **`/app/*`** assets. Embed snippets load `widget.js` from that origin and set `widgetUrl` to the same host’s `widget.html` URL.
-
-## Client embed snippet (production)
-
-Replace placeholders with your deployed widget origin, Cloud Run API URL, and jurisdiction `source`.
-
-```html
-<script>
-  window.CivicCoreWidget = {
-    widgetUrl: "https://YOUR_WIDGET_HOST/app/widget.html",
     apiBaseUrl: "https://YOUR_CLOUD_RUN_SERVICE.run.app",
-    source: "your_jurisdiction_source",
-    name: "County name",
-    logo: "https://example.gov/logo.png",
-    theme: { color: "#2563eb" },
+    widgetUrl: "https://YOUR_WIDGET_HOST/app/widget.html",
+    align: "right",
   };
 </script>
 <script async src="https://YOUR_WIDGET_HOST/widget.js"></script>
 ```
 
-If you use **split** domains (launcher on `cdn.example.com`, shell on `app.example.com`), set `widgetUrl` to the **app** host’s `widget.html` URL; `script src` stays on the CDN host.
+### Config fields
 
-## Backend: chat origin (required)
+| Field | Required | Purpose |
+|-------|----------|---------|
+| `source` | Yes | Jurisdiction slug; sent on `POST /chat` and used to fetch branding |
+| `apiBaseUrl` | Yes | Backend base URL (Cloud Run in prod, `http://localhost:4000` locally) |
+| `widgetUrl` | Recommended | HTTPS URL of `app/widget.html` on your widget host. If omitted, the launcher resolves it from the script origin |
+| `align` | No | Launcher position: `"left"` or `"right"` (default `"right"`) |
 
-Set **`WIDGET_ALLOWED_ORIGINS`** on the API (comma-separated origins where `widget.html` is served). That is the browser **`Origin`** for `fetch` from inside the iframe, not the parent marketing site. See [`backend/cloud-run.env.yaml.example`](../backend/cloud-run.env.yaml.example) and [`backend/README.md`](../backend/README.md).
+**Branding is not configured in the embed.** Set `logoPath` and `themeColor` in `secrets/jurisdictions.json`, then `yarn jurisdiction:sync` — see [`backend/README.md`](../backend/README.md#jurisdiction-logos-and-theme).
 
-Express uses permissive **`cors()`** (no origin allowlist at the middleware layer); **`requireOrigin`** enforces the widget list for `POST /chat` and vote routes.
+### Branding failure behavior
 
-### Legal & compliance
+If `/widget/branding` is unavailable or a logo fails to load:
 
-The chat footer links to [`app/legal.html`](app/legal.html), a compliance hub with:
+- Theme falls back to **`#2563eb`**
+- Header logo is hidden
+- Chat still works
 
-- [`terms.html`](app/terms.html) — Widget Terms of Service (residents)
-- [`privacy.html`](app/privacy.html) — Chat Privacy Notice
-- [`subprocessors.html`](app/subprocessors.html) — Subprocessor list
+Branding is cached in `sessionStorage` per source for the browser tab.
 
-The marketing site has separate policies at `https://civiccore.ai/privacy` and `/terms`. Client contracts (DPA, MSA) are provided directly to government customers, not on this public hub.
+---
 
-### Accessibility (WCAG 2.1 AA)
+## Local development
 
-The widget targets ADA-friendly behavior aligned with **WCAG 2.1 Level AA**.
+1. Start the backend with `ENABLE_DEV_ROUTES=true` and `WIDGET_ALLOWED_ORIGINS` including your static server origin (e.g. `http://127.0.0.1:5500`).
+2. Add logo files under `backend/secrets/logos/` and set `logoPath` / `themeColor` in `secrets/jurisdictions.json`, then `yarn jurisdiction:sync`.
+3. Serve the `widget/` folder (e.g. Live Server) and open [`demo.html`](demo.html).
+
+```html
+<script>
+  window.CivicCoreWidget = {
+    source: "chisago_county_mn",
+    widgetUrl: "app/widget.html",
+    apiBaseUrl: "http://localhost:4000",
+  };
+</script>
+<script src="cdn/widget.js"></script>
+```
+
+### Switching jurisdictions in `demo.html`
+
+With the API running, click **Dev: jurisdiction** to pick a row from `GET /dev/jurisdictions`. Selection is stored in `localStorage` and restored on reload. Full onboarding: [root README](../README.md#add-a-jurisdiction-locally).
+
+---
+
+## Production layout (single origin)
+
+Self-hosting uses one origin: launcher at **`/widget.js`**, shell at **`/app/widget.html`**, plus **`/app/*`** assets. Set `widgetUrl` to the same host’s `widget.html` URL.
+
+If launcher and shell are on **split** domains, set `widgetUrl` to the **app** host’s `widget.html` URL; keep `script src` on the CDN/launcher host.
+
+---
+
+## Backend requirements
+
+Set **`WIDGET_ALLOWED_ORIGINS`** on the API (comma-separated origins where `widget.html` is served). That is the iframe **`Origin`** for `fetch`, not the parent marketing site. See [`backend/cloud-run.env.yaml.example`](../backend/cloud-run.env.yaml.example).
+
+Express uses permissive **`cors()`**; **`WIDGET_ALLOWED_ORIGINS`** enforces the allowlist for `POST /chat`, vote routes, and **`GET /widget/branding`**.
+
+### Terms link
+
+[`app/widget.html`](app/widget.html) links to `/terms` on the widget host. Host a terms page there or change the link to a full URL.
+
+---
+
+## Accessibility (WCAG 2.1 AA)
 
 - Default theme `#2563eb` meets WCAG AA for white text on the launcher and send button.
-- Counties can set `theme.color` to match their branding; choose a color with sufficient contrast against white text on the launcher and send button.
-- The embed has two layers: the CDN launcher (`cdn/widget.js`) and the chat shell (`app/widget.html`). Test both when validating accessibility.
+- County theme colors come from `themeColor` in `jurisdictions.json` (synced via `yarn jurisdiction:sync`); choose sufficient contrast against white text.
+- Test both the launcher (`cdn/widget.js`) and chat shell (`app/widget.html`).
 - Arabic (`ar`) sets `dir="rtl"` on the chat shell.
 
-#### Automated check
+### Automated check
 
 ```bash
 cd widget
 yarn install
-# one-time if Chrome for Testing is missing:
-yarn puppeteer browsers install chrome
+yarn puppeteer browsers install chrome   # one-time
 yarn test:a11y
 ```
 
-Runs axe-core against `demo.html`, the open chat iframe, and the standalone shell. Requires Puppeteer’s Chrome for Testing binary (downloaded into `~/.cache/puppeteer`).
+Runs axe-core against `demo.html` and the chat shell. Branded logo/theme in the demo requires the backend running with uploaded logos; otherwise the default blue theme is tested.
 
-#### Manual test checklist
+### Manual test checklist
 
-- [ ] **Keyboard only:** Tab to launcher → Enter to open → type and send a message → open language list (arrows/Home/End) → Escape to close dropdown → Escape to close chat
-- [ ] **Screen reader:** Launcher announces Open/Close correctly; new messages announced in chat log; loading state announced; vote buttons report pressed state
-- [ ] **200% zoom:** Layout remains usable on desktop and mobile widths
-- [ ] **Reduced motion:** Enable OS “reduce motion”; tooltip shows static text; message/iframe animations minimized
-- [ ] **Arabic:** Switch language to العربية; layout mirrors (RTL)
-- [ ] **Custom theme:** Confirm county brand color renders correctly on launcher and send button
+- [ ] **Keyboard only:** Tab to launcher → Enter to open → send a message → language list → Escape closes chat
+- [ ] **Screen reader:** Launcher Open/Close; new messages announced; vote buttons report state
+- [ ] **200% zoom:** Layout usable on desktop and mobile
+- [ ] **Reduced motion:** Tooltip static text; minimal animations
+- [ ] **Arabic:** Switch to العربية; RTL layout
+- [ ] **County branding:** Confirm logo and theme from `/widget/branding` on launcher and send button

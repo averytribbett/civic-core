@@ -47,7 +47,7 @@ yarn jurisdiction:sync
 
 | Field | Example (Denver) | Notes |
 |-------|------------------|--------|
-| `source` | `denver_co` | Unique slug; widget + crawl + chat all use this |
+| `source` | `denver_city_co` | Unique slug; widget + crawl + chat all use this |
 | `name` | `City and County of Denver` | Display name |
 | `type` | `city` or `county` | `country` \| `state` \| `county` \| `city` \| `township` \| `village` |
 | `email` | `info@example.gov` | Required |
@@ -55,6 +55,8 @@ yarn jurisdiction:sync
 | `crawlUrl` | `https://www.denvergov.org/` | Homepage seed URL for the crawler |
 | `enabled` | `false` | Weekly job only includes `enabled=true` |
 | `phoneNumber` | `null` | Optional |
+| `logoPath` | `logos/chisago_county_mn.png` | Optional; path relative to `jurisdictions.json`. Local sync copies to `secrets/logos/` and sets `logoUrl`; prod (`LOGO_STORAGE=gcs`) uploads to bucket |
+| `themeColor` | `#8a2561` | Optional widget brand color (hex) |
 
 `yarn jurisdiction:sync` upserts every row in the JSON. If the DB has a `source` that is **missing** from the file, the script warns and **cancels by default**; type exact `y` to delete those rows and continue.
 
@@ -64,9 +66,9 @@ With an explicit `--source=` (or `CRAWL_SOURCE`), the sync job will run even whe
 
 ```bash
 cd backend
-CRAWL_SOURCE=denver_co yarn crawl:sync-one:dev
+CRAWL_SOURCE=denver_city_co yarn crawl:sync-one:dev
 # or
-yarn crawl:sync-all:dev -- --source=denver_co
+yarn crawl:sync-all:dev -- --source=denver_city_co
 ```
 
 Alternative while `DISABLE_CRAWL` is unset (local API):
@@ -74,7 +76,7 @@ Alternative while `DISABLE_CRAWL` is unset (local API):
 ```bash
 curl -X POST http://localhost:4000/crawl \
   -H 'Content-Type: application/json' \
-  -d '{"url":"https://www.denvergov.org/","source":"denver_co"}'
+  -d '{"url":"https://www.denvergov.org/","source":"denver_city_co"}'
 ```
 
 After chat quality looks good, set `enabled=true` so the weekly Cloud Run job includes this source.
@@ -88,18 +90,16 @@ After chat quality looks good, set `enabled=true` so the weekly Cloud Run job in
 3. Click **Dev: jurisdiction**, pick the county/city, confirm reload.
 4. Choice is stored in `localStorage` under `civiccore.dev.jurisdiction` and reused on the next load.
 
-Requires the API with `ENABLE_DEV_ROUTES=true`.
+Requires the API with `ENABLE_DEV_ROUTES=true`. Branding comes from `GET /widget/branding` after `yarn jurisdiction:sync` with `logoPath` / `themeColor` in JSON — see [`backend/README.md`](backend/README.md#jurisdiction-logos-and-theme).
 
-**Option B — hardcode in `demo.html`**
+**Option B — hardcode source in `demo.html`**
 
 ```html
 <script>
   window.CivicCoreWidget = {
-    source: "denver_co",
-    name: "City and County of Denver",
+    source: "denver_city_co",
     widgetUrl: "app/widget.html",
     apiBaseUrl: "http://localhost:4000",
-    theme: { color: "#2563eb" },
   };
 </script>
 <script src="cdn/widget.js"></script>
@@ -115,7 +115,7 @@ Open the demo, send a question the site should answer, and confirm citations poi
 
 ## Quick local checklist
 
-1. Edit `backend/secrets/jurisdictions.json` → `yarn jurisdiction:sync`
+1. Edit `backend/secrets/jurisdictions.json` (include optional `logoPath` / `themeColor`) → `yarn jurisdiction:sync`
 2. `CRAWL_SOURCE=<source> yarn crawl:sync-one:dev`
 3. `ENABLE_DEV_ROUTES=true` + `yarn dev`
 4. Open `widget/demo.html` → **Dev: jurisdiction** → pick the new row

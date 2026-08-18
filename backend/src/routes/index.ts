@@ -1,5 +1,6 @@
 import { Router, type RequestHandler } from "express"
 import { chatRouter } from "./chat"
+import { widgetRouter } from "./widget"
 
 export const indexRouter = Router()
 
@@ -59,4 +60,5 @@ if (devRoutesEnabled) {
   indexRouter.use("/dev", devEntry)
 }
 
+indexRouter.use("/widget", widgetRouter)
 indexRouter.use("/chat", chatRouter)

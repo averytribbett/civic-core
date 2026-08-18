@@ -47,6 +47,10 @@ model Jurisdiction {
   lastCrawlAt   DateTime?
   lastCrawlStatus String?
   lastCrawlError  String?         @db.Text
+  /// Public logo URL (local /assets/logos/ in dev, GCS in prod)
+  logoUrl       String?
+  /// Hex brand color for widget theme (e.g. #005596)
+  themeColor    String?
 
   documents     Document[]
   conversations Conversation[]

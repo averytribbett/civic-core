@@ -75,6 +75,22 @@ body {
   margin: 0;
 }
 
+.chat-header--has-logo .chat-header-name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.chat-header--has-logo .chat-header-logo {
+  margin-right: auto;
+}
+
 .chat-header-close {
   width: 36px;
   height: 36px;
@@ -835,23 +851,9 @@ html.is-mobile .chat-header {
   gap: 8px;
 }
 
-html.is-mobile .chat-header-name {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-html.is-mobile .chat-header-logo {
+html.is-mobile .chat-header--has-logo .chat-header-logo {
   height: 28px;
-  width: auto;
   max-width: 120px;
-  margin-right: auto;
 }
 
 html.is-mobile .chat-header-close {

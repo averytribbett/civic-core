@@ -8,7 +8,9 @@
       "phoneNumber": null,
       "prompt": "You are a helpful assistant for Chisago County, Minnesota. Answer using the official county website when possible.",
       "crawlUrl": "https://www.chisagocountymn.gov/",
-      "enabled": true
+      "enabled": true,
+      "logoPath": "logos/chisago_county_mn.png",
+      "themeColor": "#8a2561"
     },
     {
       "source": "denver_city_co",
@@ -18,7 +20,9 @@
       "phoneNumber": null,
       "prompt": "You are a helpful assistant for the City and County of Denver. Answer using the official website when possible.",
       "crawlUrl": "https://www.denvergov.org/",
-      "enabled": false
+      "enabled": false,
+      "logoPath": "logos/denver_city_co.png",
+      "themeColor": "#002d56"
     }
   ]
 }

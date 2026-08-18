@@ -12,10 +12,68 @@
   if (!userCfg.source) return;
 
   const DEFAULT_API_BASE = "https://civic-core-api-672197054224.us-central1.run.app";
+  const DEFAULT_THEME_COLOR = "#2563eb";
+  const BRANDING_CACHE_KEY_PREFIX = "civiccore.branding.v1:";
+  const brandingMemoryCache = new Map();
   const config = { apiBaseUrl: DEFAULT_API_BASE, ...userCfg };
 
-  function startWidget() {
+  function brandingCacheKey(source) {
+    return `${BRANDING_CACHE_KEY_PREFIX}${source}`;
+  }
+
+  function readBrandingCache(source) {
+    if (brandingMemoryCache.has(source)) return brandingMemoryCache.get(source);
+    try {
+      const raw = sessionStorage.getItem(brandingCacheKey(source));
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        brandingMemoryCache.set(source, parsed);
+        return parsed;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  function writeBrandingCache(source, data) {
+    brandingMemoryCache.set(source, data);
+    try {
+      sessionStorage.setItem(brandingCacheKey(source), JSON.stringify(data));
+    } catch (_) {}
+  }
+
+  function fetchWithTimeout(url, ms) {
+    const controller = new AbortController();
+    const timer = setTimeout(function () { controller.abort(); }, ms);
+    return fetch(url, { signal: controller.signal }).finally(function () {
+      clearTimeout(timer);
+    });
+  }
+
+  async function fetchBranding(apiBaseUrl, source) {
+    var cached = readBrandingCache(source);
+    if (cached) return cached;
+    var base = String(apiBaseUrl || "").replace(/\/$/, "");
+    if (!base || !source) return null;
+    try {
+      var res = await fetchWithTimeout(
+        base + "/widget/branding?source=" + encodeURIComponent(source),
+        5000
+      );
+      if (!res.ok) return null;
+      var data = await res.json();
+      if (data && typeof data === "object") {
+        writeBrandingCache(source, data);
+        return data;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  async function startWidget() {
   const align = (config.align === "left" ? "left" : "right");
+  const branding = await fetchBranding(config.apiBaseUrl, config.source);
+  const themeColor = (branding && branding.themeColor) || DEFAULT_THEME_COLOR;
   const supportedLangs = ["en","es","fr","de","zh","ja","pt","ar","ko"];
   const browserLang = (navigator.language || "en").split("-")[0];
   const lang = supportedLangs.includes(browserLang) ? browserLang : "en";
@@ -34,7 +92,6 @@
   };
   var loc = cdnLocales[lang] || cdnLocales.en;
 
-  const themeColor = config.theme?.color || "#2563eb";
   const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   // Focus-visible styles for launcher and tooltip (ADA)
@@ -528,7 +585,16 @@
 
   iframe.onload = () => {
     iframe.contentWindow.postMessage(
-      { type: "INIT", config, mobile: isMobile() },
+      {
+        type: "INIT",
+        config: {
+          source: config.source,
+          apiBaseUrl: config.apiBaseUrl,
+          widgetUrl: config.widgetUrl,
+          align: config.align,
+        },
+        mobile: isMobile(),
+      },
       "*"
     );
   };
@@ -536,7 +602,7 @@
 
   function runWhenBodyReady() {
     if (document.body) {
-      startWidget();
+      void startWidget();
       return;
     }
     requestAnimationFrame(runWhenBodyReady);

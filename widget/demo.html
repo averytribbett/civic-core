@@ -152,12 +152,10 @@
   <script>
     (function () {
       var STORAGE_KEY = "civiccore.dev.jurisdiction";
-      var PRESETS_URL = "jurisdiction-configs.json";
       var DEFAULT_SOURCE = "chisago_county_mn";
       var BASE_DEFAULTS = {
         widgetUrl: "app/widget.html",
         apiBaseUrl: "http://localhost:4000",
-        theme: { color: "#2563eb" },
       };
 
       function readSaved() {
@@ -191,35 +189,6 @@
         );
       }
 
-      function buildWidgetConfig(source, name, presets) {
-        var preset = presets && presets[source];
-        var config = Object.assign({}, BASE_DEFAULTS, {
-          source: source,
-          name: name || (preset && preset.name) || source,
-        });
-
-        if (preset) {
-          if (!name && preset.name) config.name = preset.name;
-          if (preset.logo) config.logo = preset.logo;
-          if (preset.theme) {
-            config.theme = Object.assign({}, BASE_DEFAULTS.theme, preset.theme);
-          }
-          if (preset.align) config.align = preset.align;
-        }
-
-        return config;
-      }
-
-      function loadPresets() {
-        return fetch(PRESETS_URL)
-          .then(function (res) {
-            return res.ok ? res.json() : {};
-          })
-          .catch(function () {
-            return {};
-          });
-      }
-
       function loadWidgetScript() {
         var script = document.createElement("script");
         script.src = "cdn/widget.js";
@@ -227,14 +196,12 @@
       }
 
       var saved = readSaved();
-      var activeSource = saved ? saved.source : DEFAULT_SOURCE;
-      var activeName = saved ? saved.name : undefined;
-
-      loadPresets().then(function (presets) {
-        window.CivicCoreWidget = buildWidgetConfig(activeSource, activeName, presets);
-        loadWidgetScript();
-        initDevModal();
+      window.CivicCoreWidget = Object.assign({}, BASE_DEFAULTS, {
+        source: saved ? saved.source : DEFAULT_SOURCE,
       });
+
+      loadWidgetScript();
+      initDevModal();
 
       function initDevModal() {
       var btn = document.getElementById("dev-jurisdiction-btn");

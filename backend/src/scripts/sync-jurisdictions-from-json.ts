@@ -1,8 +1,11 @@
 import "dotenv/config"
-import { readFile } from "node:fs/promises"
+import { readFile, stat } from "node:fs/promises"
 import path from "node:path"
 import { z } from "zod"
 import { prisma } from "../lib/prisma"
+import { uploadLogoFile } from "../lib/logo-storage"
+
+const MAX_LOGO_BYTES = 2 * 1024 * 1024
 
 const DEFAULT_FILE = path.resolve(
   process.cwd(),
@@ -28,6 +31,12 @@ const jurisdictionSchema = z.object({
   prompt: z.string().trim().min(1),
   crawlUrl: z.string().trim().url().nullable().optional(),
   enabled: z.boolean().optional().default(false),
+  /** Path to logo image (relative to the JSON file). Dev: copies locally + sets logoUrl. Prod (LOGO_STORAGE=gcs): uploads to bucket. */
+  logoPath: z.string().trim().min(1).optional(),
+  themeColor: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/, "Use hex format like #8a2561")
+    .optional(),
 })
 
 const fileSchema = z.object({
@@ -87,7 +96,17 @@ async function loadFile(filePath: string): Promise<JurisdictionInput[]> {
 }
 
 function dataFromInput(row: JurisdictionInput) {
-  return {
+  const data: {
+    name: string
+    type: JurisdictionInput["type"]
+    email: string
+    phoneNumber: string | null
+    prompt: string
+    crawlUrl: string | null
+    enabled: boolean
+    logoUrl?: string
+    themeColor?: string
+  } = {
     name: row.name,
     type: row.type,
     email: row.email,
@@ -96,6 +115,31 @@ function dataFromInput(row: JurisdictionInput) {
     crawlUrl: row.crawlUrl ?? null,
     enabled: row.enabled ?? false,
   }
+  if (row.themeColor) data.themeColor = row.themeColor
+  return data
+}
+
+async function assertLogoFile(filePath: string): Promise<void> {
+  const info = await stat(filePath)
+  if (!info.isFile()) {
+    throw new Error(`logoPath is not a file: ${filePath}`)
+  }
+  if (info.size > MAX_LOGO_BYTES) {
+    throw new Error(
+      `Logo too large (${info.size} bytes) at ${filePath}. Max is ${MAX_LOGO_BYTES} bytes.`,
+    )
+  }
+}
+
+async function resolveLogoUrl(
+  row: JurisdictionInput,
+  jsonDir: string,
+): Promise<string | undefined> {
+  if (!row.logoPath) return undefined
+  const filePath = path.resolve(jsonDir, row.logoPath)
+  await assertLogoFile(filePath)
+  const { logoUrl } = await uploadLogoFile(row.source, filePath)
+  return logoUrl
 }
 
 async function main(): Promise<void> {
@@ -103,6 +147,7 @@ async function main(): Promise<void> {
   console.log(`Syncing jurisdictions from ${filePath}`)
 
   const desired = await loadFile(filePath)
+  const jsonDir = path.dirname(filePath)
   const desiredBySource = new Map(desired.map((j) => [j.source, j]))
 
   const existing = await prisma.jurisdiction.findMany({
@@ -130,20 +175,40 @@ async function main(): Promise<void> {
     console.warn("")
   }
 
+  const logoUrlBySource = new Map<string, string>()
+  for (const row of desired) {
+    if (!row.logoPath) continue
+    const logoUrl = await resolveLogoUrl(row, jsonDir)
+    if (!logoUrl) {
+      throw new Error(`Failed to resolve logo for ${row.source}`)
+    }
+    logoUrlBySource.set(row.source, logoUrl)
+  }
+
+  for (const [source, logoUrl] of logoUrlBySource) {
+    console.log(`Logo ${source} → ${logoUrl}`)
+  }
+
   await prisma.$transaction(async (tx) => {
     for (const row of toCreate) {
+      const data = dataFromInput(row)
+      const logoUrl = logoUrlBySource.get(row.source)
+      if (logoUrl) data.logoUrl = logoUrl
       await tx.jurisdiction.create({
         data: {
           source: row.source,
-          ...dataFromInput(row),
+          ...data,
         },
       })
     }
 
     for (const row of toUpdate) {
+      const data = dataFromInput(row)
+      const logoUrl = logoUrlBySource.get(row.source)
+      if (logoUrl) data.logoUrl = logoUrl
       await tx.jurisdiction.update({
         where: { source: row.source },
-        data: dataFromInput(row),
+        data,
       })
     }
   })

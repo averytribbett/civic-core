@@ -186,13 +186,73 @@ input.addEventListener("keydown", (e) => {
   }
 });
 
+const DEFAULT_THEME_COLOR = "#2563eb";
+const BRANDING_CACHE_KEY_PREFIX = "civiccore.branding.v1:";
+const brandingMemoryCache = new Map();
+
+function brandingCacheKey(source) {
+  return `${BRANDING_CACHE_KEY_PREFIX}${source}`;
+}
+
+function readBrandingCache(source) {
+  if (brandingMemoryCache.has(source)) {
+    return brandingMemoryCache.get(source);
+  }
+  try {
+    const raw = sessionStorage.getItem(brandingCacheKey(source));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      brandingMemoryCache.set(source, parsed);
+      return parsed;
+    }
+  } catch (_) {}
+  return null;
+}
+
+function writeBrandingCache(source, data) {
+  brandingMemoryCache.set(source, data);
+  try {
+    sessionStorage.setItem(brandingCacheKey(source), JSON.stringify(data));
+  } catch (_) {}
+}
+
+function fetchWithTimeout(url, ms) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return fetch(url, { signal: controller.signal })
+    .finally(() => clearTimeout(timer));
+}
+
+async function fetchBranding(apiBaseUrl, source) {
+  const cached = readBrandingCache(source);
+  if (cached) return cached;
+
+  const base = String(apiBaseUrl || "").replace(/\/$/, "");
+  if (!base || !source) return null;
+
+  try {
+    const res = await fetchWithTimeout(
+      `${base}/widget/branding?source=${encodeURIComponent(source)}`,
+      5000,
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data && typeof data === "object") {
+      writeBrandingCache(source, data);
+      return data;
+    }
+  } catch (_) {}
+  return null;
+}
+
 let config = {
   apiBaseUrl: "",
   source: "chisago_county_mn",
   name: "",
   logo: "",
-  theme: { color: "#2563eb" },
-  align: "right", // "right" | "left" — position of widget on screen
+  theme: { color: DEFAULT_THEME_COLOR },
+  align: "right",
 };
 
 /** Last 20 messages (up to 10 user + 10 agent) for context. Each item: { role: "user" | "agent", content: string } */
@@ -212,7 +272,7 @@ function getHistoryForRequest() {
 }
 
 function applyTheme(themeColor) {
-  const hex = themeColor || "#2563eb";
+  const hex = themeColor || DEFAULT_THEME_COLOR;
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
@@ -225,32 +285,58 @@ function applyTheme(themeColor) {
   );
 }
 
-function applyConfig(c) {
-  config.apiBaseUrl = c.apiBaseUrl ?? config.apiBaseUrl;
-  config.source = c.source ?? config.source;
-  config.name = c.name ?? config.name;
-  config.logo = c.logo ?? config.logo;
-  config.theme = c.theme ?? config.theme;
-  config.align = c.align ?? config.align;
+function applyEmbedConfig(c) {
+  if (c.apiBaseUrl != null) config.apiBaseUrl = c.apiBaseUrl;
+  if (c.source != null) config.source = c.source;
+  if (c.align != null) config.align = c.align;
+}
+
+function applyBranding(branding) {
+  if (branding?.name) config.name = branding.name;
+  if (branding?.themeColor) config.theme = { color: branding.themeColor };
+  if (branding?.logoUrl) config.logo = branding.logoUrl;
+  else config.logo = "";
+
   applyTheme(config.theme?.color);
 
   const displayName = config.name || i18n.t("defaultName");
-
   const logoEl = document.getElementById("chat-logo");
   const nameEl = document.getElementById("chat-name");
+  const headerEl = logoEl?.closest(".chat-header");
   const welcomeEl = document.getElementById("welcome-message");
+  const headerName = config.name || i18n.t("headerDefaultName");
 
-  if (logoEl) {
-    if (config.logo) {
-      logoEl.src = config.logo;
-      logoEl.alt = config.name ? i18n.t("headerLogoAlt", { name: config.name }) : "";
-      logoEl.style.display = "block";
-    } else {
+  function showNameFallback() {
+    if (logoEl) {
       logoEl.style.display = "none";
+      logoEl.removeAttribute("src");
     }
+    config.logo = "";
+    headerEl?.classList.remove("chat-header--has-logo");
+    if (nameEl) nameEl.textContent = headerName;
   }
-  if (nameEl) nameEl.textContent = config.name || i18n.t("headerDefaultName");
+
+  if (logoEl && config.logo) {
+    headerEl?.classList.add("chat-header--has-logo");
+    logoEl.onerror = showNameFallback;
+    logoEl.src = config.logo;
+    logoEl.alt = config.name ? i18n.t("headerLogoAlt", { name: config.name }) : "";
+    logoEl.style.display = "block";
+    if (nameEl) nameEl.textContent = headerName;
+  } else {
+    showNameFallback();
+  }
   if (welcomeEl) welcomeEl.innerHTML = i18n.t("welcomeMessage", { name: displayName });
+}
+
+async function loadAndApplyBranding() {
+  applyTheme(DEFAULT_THEME_COLOR);
+  const branding = await fetchBranding(config.apiBaseUrl, config.source);
+  if (branding) {
+    applyBranding(branding);
+  } else {
+    applyBranding(null);
+  }
 }
 
 /** Host page tells us mobile vs desktop (iframe width is not the browser width). */
@@ -268,8 +354,9 @@ if (window.parent === window) {
 window.addEventListener("message", (e) => {
   if (!e.data || typeof e.data !== "object") return;
   if (e.data.type === "INIT" && e.data.config) {
-    applyConfig(e.data.config);
+    applyEmbedConfig(e.data.config);
     if (typeof e.data.mobile === "boolean") setMobileLayout(e.data.mobile);
+    void loadAndApplyBranding();
   } else if (e.data.type === "LAYOUT" && typeof e.data.mobile === "boolean") {
     setMobileLayout(e.data.mobile);
   }
@@ -763,8 +850,8 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// Apply default theme so colors work before INIT
-applyTheme(config.theme?.color);
+// Default theme until branding loads
+applyTheme(DEFAULT_THEME_COLOR);
 
 // Apply browser-detected locale translations to static DOM elements
 i18n.applyDomTranslations();

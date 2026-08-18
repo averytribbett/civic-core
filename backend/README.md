@@ -41,9 +41,48 @@ yarn start:release
 | `yarn crawl:sync-all:dev` | Same as above via `ts-node` (uses `.env`) |
 | `yarn crawl:sync-one:dev` | Sync one jurisdiction (`CRAWL_SOURCE` or `--source=`) |
 | `yarn crawl:sync-all:dev` | Sync all enabled jurisdictions sequentially (local dev) |
-| `yarn jurisdiction:sync` | Upsert `jurisdiction` rows from `secrets/jurisdictions.json` (local) |
+| `yarn jurisdiction:sync` | Upsert `jurisdiction` rows from `secrets/jurisdictions.json` (local); optional `logoPath` / `themeColor` per row |
 
 Legacy names `prisma:migrate`, `prisma:generate`, and `prisma:migrate:production` still work and call the same Prisma commands.
+
+## Jurisdiction logos and theme
+
+Branding lives in Postgres (`logoUrl`, `themeColor`). The widget loads it via **`GET /widget/branding?source=`**.
+
+Add optional fields to each row in **`secrets/jurisdictions.json`** (paths relative to that file):
+
+```json
+{
+  "source": "chisago_county_mn",
+  "logoPath": "logos/chisago_county_mn.png",
+  "themeColor": "#8a2561"
+}
+```
+
+Run **`yarn jurisdiction:sync`**:
+
+| `LOGO_STORAGE` | When `logoPath` is set |
+|----------------|-------------------------|
+| **`local`** (default) | Copies the file to `secrets/logos/`, sets `logoUrl` to `http://localhost:4000/assets/logos/...` |
+| **`gcs`** | Uploads to GCS, sets `logoUrl` to the public bucket URL |
+
+Omit `logoPath` on a row to leave an existing `logoUrl` unchanged. `themeColor` is updated whenever present in JSON.
+
+### Production GCS (one-time)
+
+```bash
+gcloud storage buckets create gs://civic-core-assets --location=us-central1
+gcloud storage buckets add-iam-policy-binding gs://civic-core-assets \
+  --member=allUsers --role=roles/storage.objectViewer
+```
+
+Sync against prod with:
+
+```bash
+LOGO_STORAGE=gcs GCS_ASSETS_BUCKET=civic-core-assets yarn jurisdiction:sync
+```
+
+The Cloud Run chat API only reads Postgres — no GCS access on the service itself.
 
 ## Environment variables
 
@@ -61,12 +100,16 @@ Set these in `.env` locally, or in the Cloud Run service (or Secret Manager) for
 | `MESSAGE_ENCRYPTION_KEY` | No | Optional message encryption |
 | `DISABLE_CRAWL` | No | Set to **`true`** on the **API** Cloud Run service to turn off **`/crawl`** and never load **crawlee**. The weekly sync uses a separate Cloud Run **Job**, not this route. |
 | `ENABLE_DEV_ROUTES` | No | Set to **`true` locally only** to mount **`GET /dev/jurisdictions`** (widget demo jurisdiction picker). Omit / leave unset on Cloud Run. |
+| `LOGO_STORAGE` | No | **`local`** (default) — logos in `secrets/logos/`, served at `/assets/logos/`. Set to **`gcs`** when uploading to Cloud Storage (prod). |
+| `LOGO_PUBLIC_BASE_URL` | No | Base URL for local logo links (default `http://localhost:4000`). Set if your API is reachable at a different host/port. |
+| `GCS_ASSETS_BUCKET` | Prod upload | GCS bucket name when `LOGO_STORAGE=gcs` (e.g. `civic-core-assets`). |
+| `GCS_LOGO_PREFIX` | No | Object prefix in bucket (default `logos`). |
 | `SKIP_DB_MIGRATE` | No | Set to **`true`** to skip `prisma migrate deploy` in the container (run **`yarn db:migrate:deploy`** yourself when schema changes). |
 Provider-specific API keys must match `LLM_PROVIDER`.
 
 **Jurisdiction crawl config (database):** each row in `jurisdiction` can set `enabled` (include in weekly job), `crawlUrl` (seed URL), and `lastCrawl*` fields updated by the job. New sites should start with `enabled=false` until a manual crawl looks good. Full laptop steps (create row → sync → widget demo picker) are in the [root README](../README.md#add-a-jurisdiction-locally).
 
-**CORS:** the app uses `cors()` with default options (reflective / permissive for browser preflight). Chat access is gated by **`WIDGET_ALLOWED_ORIGINS`** in [`src/lib/auth.ts`](src/lib/auth.ts).
+**CORS:** the app uses `cors()` with default options (reflective / permissive for browser preflight). Widget access is gated by **`WIDGET_ALLOWED_ORIGINS`** in [`src/lib/widget-origin.ts`](src/lib/widget-origin.ts) (chat, vote, branding).
 
 ---
 

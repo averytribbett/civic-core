@@ -5,6 +5,8 @@ import helmet from "helmet"
 import rateLimit from "express-rate-limit"
 import { indexRouter } from "./routes"
 import { createLogger } from "./lib/logger"
+import { getLocalLogosDir, getLogoStorageMode } from "./lib/logo-storage"
+import path from "node:path"
 
 const listenLog = createLogger("listen")
 
@@ -36,6 +38,23 @@ app.use(helmet())
 app.use(cors())
 
 app.use(express.json())
+
+if (getLogoStorageMode() === "local") {
+  const logosDir = getLocalLogosDir()
+  app.use(
+    "/assets/logos",
+    express.static(logosDir, {
+      maxAge: "365d",
+      immutable: true,
+      setHeaders(res) {
+        res.set("Cache-Control", "public, max-age=31536000, immutable")
+        // Widget shell is on a different origin (e.g. :5500) than the API (:4000).
+        res.set("Cross-Origin-Resource-Policy", "cross-origin")
+      },
+    }),
+  )
+  listenLog.info(`Serving local logos from ${path.relative(process.cwd(), logosDir)} at /assets/logos/`)
+}
 
 const chatLimiter = rateLimit({
   windowMs: 60 * 1000,
