@@ -2,6 +2,7 @@ import "dotenv/config"
 import { prisma } from "../lib/prisma"
 import { runCrawlSync } from "../services/crawl-sync.service"
 import { logger } from "../lib/logger"
+import { config } from "../config"
 
 type CrawlLogPayload = {
   event: "crawl_sync_jurisdiction"
@@ -25,7 +26,7 @@ function resolveSourceFilter(argv: string[]): string | undefined {
     const value = fromArg.slice("--source=".length).trim()
     if (value) return value
   }
-  const fromEnv = process.env.CRAWL_SOURCE?.trim()
+  const fromEnv = config.crawl.source
   if (fromEnv) return fromEnv
   return undefined
 }

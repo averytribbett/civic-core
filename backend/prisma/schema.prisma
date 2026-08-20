@@ -51,9 +51,12 @@ model Jurisdiction {
   logoUrl       String?
   /// Hex brand color for widget theme (e.g. #005596)
   themeColor    String?
+  /// E.164 inbound AI line (e.g. +16515550100) for Twilio/OpenAI SIP routing
+  inboundPhoneNumber String? @unique
 
   documents     Document[]
   conversations Conversation[]
+  voiceCalls    VoiceCall[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -145,4 +148,27 @@ model Message {
 
   @@index([conversationId])
   @@map("messages")
+}
+
+/// Phone AI call log for internal margin tracking (not customer billing).
+model VoiceCall {
+  id             String       @id @default(uuid())
+  jurisdictionId String
+  jurisdiction   Jurisdiction @relation(fields: [jurisdictionId], references: [id], onDelete: Restrict)
+  /// OpenAI Realtime call_id
+  externalCallId String       @unique
+  startedAt      DateTime     @default(now())
+  endedAt        DateTime?
+  durationSec    Int?
+  turnCount      Int          @default(0)
+  toolCallCount  Int          @default(0)
+  transcript     String?      @db.Text
+  model          String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([jurisdictionId])
+  @@index([startedAt])
+  @@map("voice_calls")
 }

@@ -5,6 +5,8 @@
  * tagged chat/crawl logs that include the uppercase jurisdiction id for export.
  */
 
+import { config } from "../config"
+
 export type LogLevel = "debug" | "info" | "warn" | "error"
 
 /**
@@ -22,7 +24,7 @@ export function jurisdictionLogId(source: string | undefined | null): string {
  * Defaults to redacting when NODE_ENV is unset (e.g. Cloud Run).
  */
 export function isProductionLogging(): boolean {
-  const env = (process.env.NODE_ENV || "").toLowerCase()
+  const env = config.nodeEnv.toLowerCase()
   return env !== "development" && env !== "dev" && env !== "test"
 }
 

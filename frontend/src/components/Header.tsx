@@ -31,6 +31,9 @@ export function Header() {
         <NavLink sectionId="features" className="site-header__nav-link">
           <span className="nav-num">02</span> Features
         </NavLink>
+        <a href="/voice" className="site-header__nav-link">
+          <span className="nav-num">03</span> Voice
+        </a>
       </nav>
 
       <div className="site-header__actions">

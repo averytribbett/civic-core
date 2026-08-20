@@ -12,4 +12,4 @@ export const LEGAL_ENTITY = {
   widgetOrigin: 'https://app.civiccore.ai',
 } as const
 
-export const LEGAL_LAST_UPDATED = 'August 16, 2026'
+export const LEGAL_LAST_UPDATED = 'August 18, 2026'

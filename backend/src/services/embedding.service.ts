@@ -1,13 +1,10 @@
 import OpenAI from "openai"
+import { config } from "../config"
 
 // Use OpenAI embeddings; 768 dimensions to match existing DB vector(768)
-const EMBEDDING_MODEL =
-  process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small"
+const EMBEDDING_MODEL = config.openai.embeddingModel
 const TARGET_EMBEDDING_DIM = 768
-const EMBEDDING_BATCH_SIZE = Math.min(
-  parseInt(process.env.EMBEDDING_BATCH_SIZE ?? "100", 10),
-  2048,
-)
+const EMBEDDING_BATCH_SIZE = Math.min(config.openai.embeddingBatchSize, 2048)
 // text-embedding-3-small max 8192 tokens; truncate so we never exceed (≈2 chars/token)
 const MAX_INPUT_CHARS = 8000
 
@@ -16,7 +13,7 @@ export class EmbeddingService {
 
   private getClient(): OpenAI {
     if (this.client) return this.client
-    const apiKey = process.env.OPENAI_API_KEY
+    const apiKey = config.openai.apiKey
     if (!apiKey) {
       throw new Error(
         "OPENAI_API_KEY is required for embeddings. Set it in your environment.",

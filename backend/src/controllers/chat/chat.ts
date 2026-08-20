@@ -1,6 +1,6 @@
 import { Request, Response } from "express"
 import { ChatService } from "../../services/agent/chat.service"
-import { renderSystemPrompt } from "../../lib/system-prompt"
+import { buildChatPrompt } from "../../config/prompts"
 import type { ChatSource } from "../../lib/types/chat-source.types"
 import { prisma } from "../../lib/prisma"
 import { encrypt } from "../../lib/encryption"
@@ -122,7 +122,7 @@ export const chat = async (req: Request, res: Response) => {
         : `start stream=${wantStream}`,
     )
 
-    const systemPrompt = renderSystemPrompt(jurisdiction.prompt, {
+    const systemPrompt = buildChatPrompt(jurisdiction.prompt, {
       date: new Date(),
     })
     const chatService = new ChatService(

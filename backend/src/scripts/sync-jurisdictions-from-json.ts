@@ -4,6 +4,7 @@ import path from "node:path"
 import { z } from "zod"
 import { prisma } from "../lib/prisma"
 import { uploadLogoFile } from "../lib/logo-storage"
+import { requireE164 } from "../lib/phone-number"
 
 const MAX_LOGO_BYTES = 2 * 1024 * 1024
 
@@ -28,6 +29,8 @@ const jurisdictionSchema = z.object({
   type: jurisdictionTypeSchema,
   email: z.string().trim().min(1),
   phoneNumber: z.string().trim().min(1).nullable().optional(),
+  /** E.164 AI inbound line — must include country code, e.g. +16515550100 */
+  inboundPhoneNumber: z.string().trim().min(1).nullable().optional(),
   prompt: z.string().trim().min(1),
   crawlUrl: z.string().trim().url().nullable().optional(),
   enabled: z.boolean().optional().default(false),
@@ -85,11 +88,30 @@ async function loadFile(filePath: string): Promise<JurisdictionInput[]> {
 
   const jurisdictions = result.data.jurisdictions
   const seen = new Set<string>()
+  const seenInboundPhones = new Set<string>()
   for (const row of jurisdictions) {
     if (seen.has(row.source)) {
       throw new Error(`Duplicate source in JSON: ${row.source}`)
     }
     seen.add(row.source)
+
+    if (row.inboundPhoneNumber?.trim()) {
+      let e164: string
+      try {
+        e164 = requireE164(row.inboundPhoneNumber)
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : String(error)
+        throw new Error(
+          `Invalid inboundPhoneNumber for "${row.source}": ${message}`,
+        )
+      }
+      row.inboundPhoneNumber = e164
+      if (seenInboundPhones.has(e164)) {
+        throw new Error(`Duplicate inboundPhoneNumber in JSON: ${e164}`)
+      }
+      seenInboundPhones.add(e164)
+    }
   }
 
   return jurisdictions
@@ -101,6 +123,7 @@ function dataFromInput(row: JurisdictionInput) {
     type: JurisdictionInput["type"]
     email: string
     phoneNumber: string | null
+    inboundPhoneNumber: string | null
     prompt: string
     crawlUrl: string | null
     enabled: boolean
@@ -111,6 +134,7 @@ function dataFromInput(row: JurisdictionInput) {
     type: row.type,
     email: row.email,
     phoneNumber: row.phoneNumber ?? null,
+    inboundPhoneNumber: row.inboundPhoneNumber ?? null,
     prompt: row.prompt,
     crawlUrl: row.crawlUrl ?? null,
     enabled: row.enabled ?? false,

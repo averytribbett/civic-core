@@ -6,21 +6,13 @@ import rateLimit from "express-rate-limit"
 import { indexRouter } from "./routes"
 import { createLogger } from "./lib/logger"
 import { getLocalLogosDir, getLogoStorageMode } from "./lib/logo-storage"
+import { config } from "./config"
 import path from "node:path"
 
 const listenLog = createLogger("listen")
 
 function listenPort(): number {
-  const raw = process.env.PORT
-  if (raw === undefined || raw === "") {
-    return 4000
-  }
-  const n = Number.parseInt(raw, 10)
-  if (!Number.isFinite(n) || n <= 0 || n > 65535) {
-    listenLog.error(`Invalid PORT=${JSON.stringify(raw)}, using 4000`)
-    return 4000
-  }
-  return n
+  return config.port
 }
 
 const app: Express = express()
@@ -37,7 +29,12 @@ app.use(helmet())
 
 app.use(cors())
 
-app.use(express.json())
+app.use((req, res, next) => {
+  if (req.path === "/voice/openai/webhook") {
+    return next()
+  }
+  return express.json()(req, res, next)
+})
 
 if (getLogoStorageMode() === "local") {
   const logosDir = getLocalLogosDir()

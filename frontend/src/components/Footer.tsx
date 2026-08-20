@@ -9,6 +9,9 @@ export function Footer() {
       </div>
       <div className="site-footer__links cell">
         <nav className="site-footer__legal" aria-label="Legal">
+          <a href="/voice" className="mono-label">
+            Voice
+          </a>
           <a href="/privacy" className="mono-label">
             Privacy
           </a>

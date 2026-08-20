@@ -10,6 +10,7 @@ export const websitePrivacy: LegalDocument = {
       paragraphs: [
         `This Privacy Policy describes how ${LEGAL_ENTITY.name} (“Civic Core,” “we,” “us”) handles information when you visit our marketing website at ${LEGAL_ENTITY.website}.`,
         `It does not cover the Civic Core chat widget embedded on city or county websites. That product has a separate Chat Privacy Notice hosted at ${LEGAL_ENTITY.widgetOrigin}/app/privacy.html.`,
+        'The Site may describe Civic Core Voice, a future AI phone line for municipalities. That product is not generally available yet. When Voice launches, call audio and transcripts will be covered by a separate product privacy notice — not this Site policy.',
       ],
     },
     {

@@ -16,8 +16,10 @@ export const websiteTerms: LegalDocument = {
       title: 'What the Site is',
       paragraphs: [
         'The Site provides general information about Civic Core’s AI assistant for cities and counties, including product descriptions, illustrations, and ways to contact us or request a demo.',
+        'The Site may also describe Civic Core Voice — an AI phone line product (including “Coming Soon” pages). Voice is not generally available unless we state otherwise in writing.',
         'Interactive previews on the Site are demonstrations only. They are not connected to a live government deployment unless clearly stated.',
         'Use of the Civic Core chat widget on a government website is governed by separate widget terms and privacy notice, not these Site Terms.',
+        'When Civic Core Voice is offered to a government entity, that service will be governed by a separate customer agreement or order form between Civic Core and the entity — not these Site Terms.',
       ],
     },
     {

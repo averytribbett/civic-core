@@ -1,4 +1,5 @@
 import type { Request } from "express"
+import { config } from "../config"
 
 /**
  * Canonical browser origin (scheme + host + port) for CORS-style comparison.
@@ -15,15 +16,8 @@ export function canonicalOriginFromUrlString(urlOrOrigin: string): string | null
  * Origins allowed to call widget routes. Set `WIDGET_ALLOWED_ORIGINS`
  * to a comma-separated list, e.g. `https://civic-core-widget.web.app,https://app.civiccore.ai`
  */
-export function getWidgetAllowedOrigins(): string[] {
-  const raw = process.env.WIDGET_ALLOWED_ORIGINS
-  if (!raw?.trim()) return []
-  const out: string[] = []
-  for (const part of raw.split(",")) {
-    const c = canonicalOriginFromUrlString(part)
-    if (c) out.push(c)
-  }
-  return out
+export function getWidgetAllowedOrigins(): readonly string[] {
+  return config.widget.allowedOrigins
 }
 
 export function requestCanonicalOrigin(req: Request): string | null {

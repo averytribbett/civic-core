@@ -1,11 +1,13 @@
 import { Router, type RequestHandler } from "express"
 import { chatRouter } from "./chat"
 import { widgetRouter } from "./widget"
+import { config } from "../config"
 
 export const indexRouter = Router()
 
-const crawlDisabled = process.env.DISABLE_CRAWL === "true"
-const devRoutesEnabled = process.env.ENABLE_DEV_ROUTES === "true"
+const voiceEnabled = config.features.voiceEnabled
+const crawlDisabled = config.features.crawlDisabled
+const devRoutesEnabled = config.features.devRoutesEnabled
 
 if (crawlDisabled) {
   const crawlNotAvailable: RequestHandler = (_req, res) => {
@@ -62,3 +64,23 @@ if (devRoutesEnabled) {
 
 indexRouter.use("/widget", widgetRouter)
 indexRouter.use("/chat", chatRouter)
+
+if (voiceEnabled) {
+  let voiceRouterPromise: Promise<import("express").Router> | null = null
+  function loadVoiceRouter() {
+    if (!voiceRouterPromise) {
+      voiceRouterPromise = import("./voice").then((m) => m.voiceRouter)
+    }
+    return voiceRouterPromise
+  }
+
+  const voiceEntry: import("express").RequestHandler = (req, res, next) => {
+    void loadVoiceRouter()
+      .then((router) => {
+        ;(router as import("express").RequestHandler)(req, res, next)
+      })
+      .catch(next)
+  }
+
+  indexRouter.use("/voice", voiceEntry)
+}

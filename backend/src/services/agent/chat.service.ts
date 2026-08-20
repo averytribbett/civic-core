@@ -11,6 +11,7 @@ import {
 import { StructuredToolInterface } from "@langchain/core/tools"
 import type { ChatSource } from "../../lib/types/chat-source.types"
 import { createLogger, isProductionLogging, safeLogText } from "../../lib/logger"
+import { config } from "../../config"
 import { createSearchWebsiteDocumentsTool } from "./tools/search-website-documents"
 import { SourcesCollector } from "./sources-collector"
 
@@ -97,7 +98,7 @@ export class ChatService {
   constructor(jurisdictionId: string, systemPrompt: string, logSource?: string) {
     this.logSource = logSource ?? jurisdictionId
     this.systemPrompt = systemPrompt
-    this.model = process.env.LLM_MODEL
+    this.model = config.llm.model
     this.sourcesCollector = new SourcesCollector()
     this.searchTool = createSearchWebsiteDocumentsTool(jurisdictionId, {
       getCollector: () => this.sourcesCollector,
@@ -112,10 +113,8 @@ export class ChatService {
 
   private createLLM(): BoundLLM {
     const model = this.model
-    const maxTokens = parseInt(process.env.LLM_MAX_TOKENS || "1000", 10)
-    const reasoningEffort = (
-      process.env.LLM_REASONING_EFFORT || "none"
-    ).toLowerCase()
+    const maxTokens = config.llm.maxTokens
+    const reasoningEffort = config.llm.reasoningEffort
 
     if (!model) {
       throw new Error(

@@ -159,3 +159,24 @@ export function formatRetrievedDocuments(
 
   return `Found ${chunks.length} relevant document chunk(s). Use the content below to answer the user. Prefer citing stable citizen-facing service pages over meeting agendas, minutes, or PDF packets when both support the answer or the user's question does not specify a specific document type. When you rely on a source for a specific fact, mark it inline with its index like [1] or [2]. Only cite indices you actually used. Do not include URLs, markdown hyperlinks, or a Sources section — the UI shows citation chips separately. Still use normal markdown formatting (bold, lists, headings) for readability.\n\n${contextParts.join("\n\n---\n\n")}`
 }
+
+/** Format retrieved chunks for voice Realtime tool output (no markdown/citation UI). */
+export function formatRetrievedDocumentsForVoice(
+  chunks: RetrievedChunk[],
+): string {
+  if (chunks.length === 0) {
+    return "No relevant documents found for the query."
+  }
+
+  const contextParts = chunks.map((chunk, i) => {
+    const heading = chunk.heading ? `Heading: ${chunk.heading}\n` : ""
+    const page =
+      chunk.pageStart != null ? `Page: ${chunk.pageStart}\n` : ""
+    const title = chunk.document.title
+      ? `Title: ${chunk.document.title}\n`
+      : ""
+    return `[${i + 1}]\n${title}${page}${heading}${chunk.content}`
+  })
+
+  return `Found ${chunks.length} relevant document chunk(s). Use these facts to answer the caller in spoken plain English. Do not read URLs aloud unless essential. Prefer citizen service pages over meeting agendas or minutes.\n\n${contextParts.join("\n\n---\n\n")}`
+}

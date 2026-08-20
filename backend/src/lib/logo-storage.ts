@@ -1,5 +1,6 @@
 import { copyFile, mkdir } from "node:fs/promises"
 import path from "node:path"
+import { config, type LogoStorageMode } from "../config"
 
 const ALLOWED_EXT = new Set([".png", ".jpg", ".jpeg", ".webp", ".svg"])
 const MIME_BY_EXT: Record<string, string> = {
@@ -10,11 +11,10 @@ const MIME_BY_EXT: Record<string, string> = {
   ".svg": "image/svg+xml",
 }
 
-export type LogoStorageMode = "local" | "gcs"
+export type { LogoStorageMode }
 
 export function getLogoStorageMode(): LogoStorageMode {
-  const raw = process.env.LOGO_STORAGE?.trim().toLowerCase()
-  return raw === "gcs" ? "gcs" : "local"
+  return config.logo.storage
 }
 
 export function getLocalLogosDir(): string {
@@ -22,14 +22,11 @@ export function getLocalLogosDir(): string {
 }
 
 export function getLogoPublicBaseUrl(): string {
-  const fromEnv = process.env.LOGO_PUBLIC_BASE_URL?.trim()
-  if (fromEnv) return fromEnv.replace(/\/$/, "")
-  const port = process.env.PORT?.trim() || "4000"
-  return `http://localhost:${port}`
+  return config.logo.publicBaseUrl
 }
 
 export function getGcsBucket(): string {
-  const bucket = process.env.GCS_ASSETS_BUCKET?.trim()
+  const bucket = config.logo.gcsBucket
   if (!bucket) {
     throw new Error("GCS_ASSETS_BUCKET is required when LOGO_STORAGE=gcs")
   }
@@ -37,7 +34,7 @@ export function getGcsBucket(): string {
 }
 
 export function getGcsLogoPrefix(): string {
-  return (process.env.GCS_LOGO_PREFIX?.trim() || "logos").replace(/^\/+|\/+$/g, "")
+  return config.logo.gcsPrefix
 }
 
 export function assertValidLogoExtension(filePath: string): string {

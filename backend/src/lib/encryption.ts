@@ -1,4 +1,5 @@
 import crypto from "crypto"
+import { config } from "../config"
 
 const ALGORITHM = "aes-256-gcm"
 const IV_LENGTH = 16
@@ -7,8 +8,8 @@ const SALT_LENGTH = 32
 const KEY_LENGTH = 32
 
 function getKey(): Buffer {
-  const keyHex = process.env.MESSAGE_ENCRYPTION_KEY
-  if (!keyHex || typeof keyHex !== "string") {
+  const keyHex = config.security.messageEncryptionKey
+  if (!keyHex) {
     throw new Error("MESSAGE_ENCRYPTION_KEY is not configured")
   }
   const key = Buffer.from(keyHex, "hex")
@@ -19,7 +20,7 @@ function getKey(): Buffer {
 }
 
 function isEncryptionEnabled(): boolean {
-  return !!process.env.MESSAGE_ENCRYPTION_KEY
+  return config.security.messageEncryptionEnabled
 }
 
 /**
