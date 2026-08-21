@@ -129,7 +129,6 @@ function loadConfig(): AppConfig {
         trimOptional(process.env.VOICE_REALTIME_MODEL) ?? "gpt-realtime-2.1",
       realtimeVoice:
         trimOptional(process.env.VOICE_REALTIME_VOICE) ?? "marin",
-      maxToolRounds: 2,
       publicBaseUrl: trimOptional(process.env.PUBLIC_BASE_URL)?.replace(
         /\/$/,
         "",

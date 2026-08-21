@@ -2,7 +2,7 @@ import OpenAI from "openai"
 import { createLogger } from "../../lib/logger"
 import { config } from "../../config"
 import { buildVoicePrompt } from "../../config/prompts"
-import { SEARCH_WEBSITE_DOCUMENTS_TOOL } from "./search-tool-definition"
+import { SEARCH_WEBSITE_DOCUMENTS_TOOL } from "../agent/tools/search-website-documents"
 
 const log = createLogger("realtime-accept")
 

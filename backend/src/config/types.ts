@@ -44,7 +44,6 @@ export type AppConfig = {
   voice: {
     realtimeModel: string
     realtimeVoice: string
-    maxToolRounds: number
     publicBaseUrl: string | undefined
   }
   logo: {

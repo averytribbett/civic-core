@@ -1,7 +1,10 @@
 import WebSocket from "ws"
 import { createLogger } from "../../lib/logger"
 import { config } from "../../config"
-import { executeSearchWebsiteDocuments } from "./search-tool-handler"
+import {
+  SEARCH_WEBSITE_DOCUMENTS_NAME,
+  executeSearchWebsiteDocuments,
+} from "../agent/tools/search-website-documents"
 import {
   appendVoiceCallTranscript,
   incrementVoiceCallTurns,
@@ -36,24 +39,9 @@ async function handleFunctionCall(
     name?: string
     arguments?: string
   },
-  toolRound: { count: number },
 ) {
-  if (item.name !== "search_website_documents") return
-  if (toolRound.count >= config.voice.maxToolRounds) {
-    sendJson(ws, {
-      type: "conversation.item.create",
-      item: {
-        type: "function_call_output",
-        call_id: item.call_id,
-        output:
-          "Tool limit reached for this call. Answer from general guidance or suggest the website.",
-      },
-    })
-    sendJson(ws, { type: "response.create" })
-    return
-  }
+  if (item.name !== SEARCH_WEBSITE_DOCUMENTS_NAME) return
 
-  toolRound.count += 1
   let query = ""
   try {
     const parsed = JSON.parse(item.arguments || "{}") as { query?: string }
@@ -67,7 +55,11 @@ async function handleFunctionCall(
   const output = await executeSearchWebsiteDocuments(
     query,
     ctx.jurisdictionId,
-    ctx.jurisdictionSource,
+    {
+      logSource: ctx.jurisdictionSource,
+      loggerName: "voice-tool",
+      format: "voice",
+    },
   )
 
   sendJson(ws, {
@@ -114,8 +106,6 @@ export function attachRealtimeSideband(ctx: SidebandContext): void {
     },
   })
 
-  const toolRound = { count: 0 }
-
   ws.on("open", () => {
     log.info(`Sideband connected callId=${ctx.callId}`)
     sendJson(ws, {
@@ -150,7 +140,7 @@ export function attachRealtimeSideband(ctx: SidebandContext): void {
       if (event.type === "response.done" && event.response) {
         const calls = extractFunctionCalls(event.response)
         for (const fc of calls) {
-          await handleFunctionCall(ws, ctx, fc, toolRound)
+          await handleFunctionCall(ws, ctx, fc)
         }
       }
 

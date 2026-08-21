@@ -360,8 +360,20 @@
     background: "white"
   });
 
+  const backdrop = document.createElement("div");
+  backdrop.className = "civiccore-widget-backdrop";
+  backdrop.setAttribute("aria-hidden", "true");
+  Object.assign(backdrop.style, {
+    position: "fixed",
+    inset: "0",
+    zIndex: 2147483646,
+    background: "transparent",
+    display: "none",
+  });
+
   document.body.appendChild(button);
   document.body.appendChild(iframe);
+  document.body.appendChild(backdrop);
 
   let open = false;
   let inertedElements = [];
@@ -369,7 +381,12 @@
   function trapFocus() {
     inertedElements = [];
     Array.from(document.body.children).forEach((child) => {
-      if (child !== button && child !== iframe && child !== tooltip) {
+      if (
+        child !== button &&
+        child !== iframe &&
+        child !== tooltip &&
+        child !== backdrop
+      ) {
         child.inert = true;
         inertedElements.push(child);
       }
@@ -495,6 +512,7 @@
     button.setAttribute("aria-label", loc.closeChat);
     dismissTooltip();
     button.innerHTML = closeIconSvg;
+    backdrop.style.display = "block";
     iframe.style.display = "block";
     trapFocus();
     if (prefersReducedMotion) {
@@ -523,6 +541,7 @@
     button.innerHTML = chatIconSvg;
     button.style.visibility = "";
     button.style.pointerEvents = "";
+    backdrop.style.display = "none";
     releaseFocusTrap();
     if (prefersReducedMotion) {
       iframe.style.opacity = "0";
@@ -555,6 +574,9 @@
   }
 
   button.onclick = toggle;
+  backdrop.addEventListener("click", () => {
+    if (open) closeChat();
+  });
 
   window.CivicCore = {
     open: () => {
