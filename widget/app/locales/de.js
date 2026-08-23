@@ -24,4 +24,5 @@
   closeChat: "Chat schließen",
   sourcesLabel: "Quellen",
   opensInNewTab: "Öffnet in einem neuen Tab",
+  faqSuggestionsLabel: "Vorgeschlagene Fragen",
 };

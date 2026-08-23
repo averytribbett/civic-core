@@ -24,4 +24,5 @@
   closeChat: "チャットを閉じる",
   sourcesLabel: "出典",
   opensInNewTab: "新しいタブで開きます",
+  faqSuggestionsLabel: "おすすめの質問",
 };

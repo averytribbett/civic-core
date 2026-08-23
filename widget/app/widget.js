@@ -6,6 +6,26 @@ const sendBtn = form.querySelector(".send-btn");
 const textarea = document.getElementById("input");
 const gradientTop = document.querySelector(".gradient-top");
 const gradientBottom = document.querySelector(".gradient-bottom");
+const faqSuggestionsEl = document.getElementById("faq-suggestions");
+
+let faqItems = [];
+let usedFaqIds = new Set();
+let faqHighlightIndex = -1;
+let pendingFaqId = null;
+
+function isEnglishLocale() {
+  const locale = (typeof i18n !== "undefined" && i18n.locale) || "en";
+  return String(locale).toLowerCase().startsWith("en");
+}
+
+function hideFaqSuggestions() {
+  faqHighlightIndex = -1;
+  if (!faqSuggestionsEl) return;
+  faqSuggestionsEl.innerHTML = "";
+  faqSuggestionsEl.hidden = true;
+  input?.setAttribute("aria-expanded", "false");
+  input?.removeAttribute("aria-activedescendant");
+}
 
 /** Locale code to display name for the language dropdown */
 const LOCALE_NAMES = {
@@ -55,6 +75,7 @@ if (langTrigger && langDropdown) {
     i18n.setLocale(code);
     updateLangTriggerLabel();
     closeLangDropdown();
+    hideFaqSuggestions();
     const nameEl = document.getElementById("chat-name");
     if (nameEl) {
       nameEl.textContent = config.name || i18n.t("headerDefaultName");
@@ -159,7 +180,10 @@ function resetFormSize() {
   gradientBottom?.classList.add("hidden");
 }
 
-textarea.addEventListener("input", autoResize);
+textarea.addEventListener("input", () => {
+  autoResize();
+  updateFaqSuggestions();
+});
 resetFormSize();
 
 function scrollMessagesToEnd() {
@@ -180,6 +204,39 @@ input.addEventListener("blur", () => {
 });
 
 input.addEventListener("keydown", (e) => {
+  if (!faqSuggestionsEl?.hidden) {
+    const options = faqSuggestionsEl.querySelectorAll(".faq-suggestion");
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (options.length) {
+        faqHighlightIndex = Math.min(faqHighlightIndex + 1, options.length - 1);
+        if (faqHighlightIndex < 0) faqHighlightIndex = 0;
+        setFaqHighlight(options);
+      }
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (options.length) {
+        faqHighlightIndex = Math.max(faqHighlightIndex - 1, 0);
+        setFaqHighlight(options);
+      }
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      hideFaqSuggestions();
+      return;
+    }
+    if (e.key === "Enter" && !e.shiftKey && faqHighlightIndex >= 0) {
+      const selected = options[faqHighlightIndex];
+      if (selected) {
+        e.preventDefault();
+        sendFaqSuggestion(selected.dataset.faqId, selected.dataset.question);
+        return;
+      }
+    }
+  }
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
     form.requestSubmit();
@@ -261,6 +318,292 @@ let messageHistory = [];
 /** Current conversation id from backend; sent with each request so messages are stored in the same thread. */
 let conversationId = null;
 
+const FAQ_CACHE_KEY_PREFIX = "civiccore.faqs.v1:";
+const FAQ_MIN_QUERY_CHARS = 3;
+const FAQ_MAX_SUGGESTIONS = 3;
+/** Algolia-style typo thresholds: 1 edit at 4+ chars, 2 at 8+. */
+const FAQ_TYPO_1_MIN = 4;
+const FAQ_TYPO_2_MIN = 8;
+const FAQ_STOPWORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "at",
+  "for",
+  "in",
+  "is",
+  "my",
+  "of",
+  "on",
+  "or",
+  "the",
+  "to",
+]);
+
+function faqCacheKey(source) {
+  return `${FAQ_CACHE_KEY_PREFIX}${source}`;
+}
+
+function readFaqCache(source) {
+  try {
+    const raw = sessionStorage.getItem(faqCacheKey(source));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && Array.isArray(parsed.faqs)) return parsed.faqs;
+  } catch (_) {}
+  return null;
+}
+
+function writeFaqCache(source, faqs) {
+  try {
+    sessionStorage.setItem(faqCacheKey(source), JSON.stringify({ faqs }));
+  } catch (_) {}
+}
+
+function normalizeFaqQuery(value) {
+  return String(value)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenizeFaqText(value) {
+  const normalized = normalizeFaqQuery(value);
+  return normalized ? normalized.split(" ") : [];
+}
+
+function levenshteinDistance(a, b) {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  const row = new Array(b.length + 1);
+  for (let j = 0; j <= b.length; j++) row[j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    let prev = row[0];
+    row[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cur = row[j];
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + cost);
+      prev = cur;
+    }
+  }
+  return row[b.length];
+}
+
+function maxTokenTypos(token) {
+  if (token.length >= FAQ_TYPO_2_MIN) return 2;
+  if (token.length >= FAQ_TYPO_1_MIN) return 1;
+  return 0;
+}
+
+function scoreTokenMatch(queryToken, questionToken) {
+  if (!queryToken || !questionToken) return null;
+  if (questionToken === queryToken) {
+    return { kind: "exact", typos: 0, prefixLength: queryToken.length };
+  }
+  if (questionToken.startsWith(queryToken)) {
+    return { kind: "prefix", typos: 0, prefixLength: queryToken.length };
+  }
+
+  const maxTypos = maxTokenTypos(queryToken);
+  if (maxTypos === 0) return null;
+
+  const prefix = questionToken.slice(0, queryToken.length);
+  const prefixDist = levenshteinDistance(queryToken, prefix);
+  if (prefixDist > 0 && prefixDist <= maxTypos) {
+    return {
+      kind: "typo",
+      typos: prefixDist,
+      prefixLength: Math.min(queryToken.length, questionToken.length),
+    };
+  }
+
+  if (Math.abs(queryToken.length - questionToken.length) <= maxTypos) {
+    const dist = levenshteinDistance(queryToken, questionToken);
+    if (dist > 0 && dist <= maxTypos) {
+      return { kind: "typo", typos: dist, prefixLength: questionToken.length };
+    }
+  }
+  return null;
+}
+
+function betterTokenHit(candidate, current) {
+  if (!current) return true;
+  if (candidate.typos !== current.typos) return candidate.typos < current.typos;
+  if (candidate.kind === "exact" && current.kind !== "exact") return true;
+  if (candidate.kind !== "exact" && current.kind === "exact") return false;
+  return candidate.index < current.index;
+}
+
+function matchFaqSuggestion(query, question) {
+  const qTokens = tokenizeFaqText(query);
+  const tTokens = tokenizeFaqText(question);
+  if (!qTokens.length || !tTokens.length) return { score: 0, hits: [] };
+  if (qTokens.every((token) => FAQ_STOPWORDS.has(token))) {
+    return { score: 0, hits: [] };
+  }
+
+  const used = new Set();
+  const hits = [];
+  let typoCount = 0;
+  let exactCount = 0;
+
+  for (const queryToken of qTokens) {
+    let best = null;
+    for (let index = 0; index < tTokens.length; index++) {
+      if (used.has(index)) continue;
+      const match = scoreTokenMatch(queryToken, tTokens[index]);
+      if (!match) continue;
+      const candidate = { ...match, index, queryToken };
+      if (betterTokenHit(candidate, best)) best = candidate;
+    }
+    if (!best) return { score: 0, hits: [] };
+    used.add(best.index);
+    hits.push(best);
+    typoCount += best.typos;
+    if (best.kind === "exact") exactCount += 1;
+  }
+
+  const indexes = hits.map((hit) => hit.index).sort((a, b) => a - b);
+  const first = indexes[0];
+  const last = indexes[indexes.length - 1];
+  const proximityGap = last - first + 1 - qTokens.length;
+  const score =
+    1000 -
+    typoCount * 80 -
+    first * 12 -
+    proximityGap * 8 +
+    exactCount * 4 +
+    qTokens.length * 2;
+
+  return { score, hits };
+}
+
+function renderFaqSuggestionLabel(question, hits) {
+  const frag = document.createDocumentFragment();
+  const hitByIndex = new Map(hits.map((hit) => [hit.index, hit]));
+  const parts = question.match(/[\p{L}\p{N}]+|[^\p{L}\p{N}]+/gu) || [question];
+  let tokenIndex = -1;
+
+  for (const part of parts) {
+    if (/[\p{L}\p{N}]/u.test(part)) {
+      tokenIndex += 1;
+      const hit = hitByIndex.get(tokenIndex);
+      if (hit && hit.prefixLength > 0) {
+        const n = Math.min(hit.prefixLength, part.length);
+        const mark = document.createElement("strong");
+        mark.textContent = part.slice(0, n);
+        frag.appendChild(mark);
+        if (n < part.length) {
+          frag.appendChild(document.createTextNode(part.slice(n)));
+        }
+        continue;
+      }
+    }
+    frag.appendChild(document.createTextNode(part));
+  }
+  return frag;
+}
+
+function setFaqHighlight(options) {
+  options.forEach((opt, index) => {
+    const selected = index === faqHighlightIndex;
+    opt.setAttribute("aria-selected", selected ? "true" : "false");
+    if (selected) {
+      input.setAttribute("aria-activedescendant", opt.id);
+      opt.scrollIntoView({ block: "nearest" });
+    }
+  });
+}
+
+function sendFaqSuggestion(faqId, question) {
+  if (!faqId || !question) return;
+  pendingFaqId = faqId;
+  input.value = question;
+  hideFaqSuggestions();
+  autoResize();
+  form.requestSubmit();
+}
+
+function updateFaqSuggestions() {
+  if (!faqSuggestionsEl) return;
+  if (!isEnglishLocale() || !faqItems.length) {
+    hideFaqSuggestions();
+    return;
+  }
+  const query = input.value.trim();
+  if (query.length < FAQ_MIN_QUERY_CHARS) {
+    hideFaqSuggestions();
+    return;
+  }
+  const matches = faqItems
+    .filter((item) => item && item.id && item.question && !usedFaqIds.has(item.id))
+    .map((item) => ({ item, ...matchFaqSuggestion(query, item.question) }))
+    .filter((row) => row.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, FAQ_MAX_SUGGESTIONS);
+
+  if (matches.length === 0) {
+    hideFaqSuggestions();
+    return;
+  }
+
+  faqSuggestionsEl.innerHTML = "";
+  matches.forEach((row, index) => {
+    const item = row.item;
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "faq-suggestion";
+    btn.id = `faq-suggestion-${index}`;
+    btn.setAttribute("role", "option");
+    btn.setAttribute("aria-selected", "false");
+    btn.dataset.faqId = item.id;
+    btn.dataset.question = item.question;
+    btn.appendChild(renderFaqSuggestionLabel(item.question, row.hits));
+    btn.addEventListener("mousedown", (e) => e.preventDefault());
+    btn.addEventListener("click", () => sendFaqSuggestion(item.id, item.question));
+    li.appendChild(btn);
+    faqSuggestionsEl.appendChild(li);
+  });
+  faqHighlightIndex = -1;
+  faqSuggestionsEl.hidden = false;
+  input.setAttribute("aria-expanded", "true");
+}
+
+async function fetchFaqs(apiBaseUrl, source) {
+  const cached = readFaqCache(source);
+  if (cached) {
+    faqItems = cached;
+    return;
+  }
+  const base = String(apiBaseUrl || "").replace(/\/$/, "");
+  if (!base || !source) {
+    faqItems = [];
+    return;
+  }
+  try {
+    const res = await fetchWithTimeout(
+      `${base}/widget/faqs?source=${encodeURIComponent(source)}`,
+      5000,
+    );
+    if (!res.ok) {
+      faqItems = [];
+      return;
+    }
+    const data = await res.json();
+    const faqs = Array.isArray(data?.faqs) ? data.faqs : [];
+    faqItems = faqs.filter(
+      (item) => item && typeof item.id === "string" && typeof item.question === "string",
+    );
+    writeFaqCache(source, faqItems);
+  } catch (_) {
+    faqItems = [];
+  }
+}
+
 const MAX_HISTORY_LENGTH = 20;
 
 /** Build request payload history: array of { role, content } for backend parseHistory (last 20 only). */
@@ -337,6 +680,7 @@ async function loadAndApplyBranding() {
   } else {
     applyBranding(null);
   }
+  await fetchFaqs(config.apiBaseUrl, config.source);
 }
 
 /** Host page tells us mobile vs desktop (iframe width is not the browser width). */
@@ -647,7 +991,7 @@ function removeStatusIndicator() {
   el.remove();
 }
 
-async function sendToBackendStreaming(message, { onToken, signal } = {}) {
+async function sendToBackendStreaming(message, { onToken, signal, faqId } = {}) {
   const base = (config.apiBaseUrl || "").replace(/\/$/, "");
   const url = base ? `${base}/chat` : "/chat";
   const res = await fetch(url, {
@@ -663,6 +1007,7 @@ async function sendToBackendStreaming(message, { onToken, signal } = {}) {
       conversationId: conversationId || undefined,
       language: i18n.locale,
       stream: true,
+      faqId: faqId || undefined,
     }),
     signal,
   });
@@ -732,6 +1077,9 @@ form.onsubmit = async (e) => {
   e.preventDefault();
   const text = input.value.trim();
   if (!text) return;
+  const faqId = pendingFaqId;
+  pendingFaqId = null;
+  hideFaqSuggestions();
 
   addMessage(text, "user");
   input.value = "";
@@ -775,6 +1123,7 @@ form.onsubmit = async (e) => {
   try {
     const data = await sendToBackendStreaming(text, {
       signal: abortController.signal,
+      faqId,
       onToken: (delta) => {
         rawMarkdown += delta;
         scheduleRender();
@@ -783,6 +1132,7 @@ form.onsubmit = async (e) => {
 
     clearStatusOnce();
     if (data.conversationId) conversationId = data.conversationId;
+    if (data.faqId) usedFaqIds.add(data.faqId);
     const response = data.response || rawMarkdown;
     const sources = Array.isArray(data.sources) ? data.sources : [];
 
@@ -844,6 +1194,10 @@ document.addEventListener("keydown", (e) => {
     if (dropdown?.getAttribute("aria-hidden") === "false") {
       closeLangDropdown();
       trigger?.focus();
+      return;
+    }
+    if (faqSuggestionsEl && !faqSuggestionsEl.hidden) {
+      hideFaqSuggestions();
       return;
     }
     window.parent.postMessage({ type: "CLOSE_WIDGET" }, "*");

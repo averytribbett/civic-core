@@ -4,6 +4,7 @@ import { load } from "cheerio"
 import {
   CrawlIngestPipeline,
   isBotBlockedHtml,
+  runCrawlerThenTeardown,
   shouldSkipCrawlUrl,
 } from "../src/services/crawl-sync.service"
 import { dedupeDocumentsByUrl } from "../src/services/document.service"
@@ -106,4 +107,41 @@ test("shouldSkipCrawlUrl skips OpenCities files and language alternates", () => 
     true,
   )
   assert.equal(shouldSkipCrawlUrl("https://www.denvergov.org/Services"), false)
+})
+
+test("runCrawlerThenTeardown tears down after a successful run", async () => {
+  const calls: string[] = []
+  await runCrawlerThenTeardown(
+    {
+      async run(startUrls) {
+        calls.push(`run:${startUrls.join(",")}`)
+      },
+      async teardown() {
+        calls.push("teardown")
+      },
+    },
+    ["https://example.gov/"],
+  )
+  assert.deepEqual(calls, ["run:https://example.gov/", "teardown"])
+})
+
+test("runCrawlerThenTeardown still tears down when run throws", async () => {
+  const calls: string[] = []
+  await assert.rejects(
+    () =>
+      runCrawlerThenTeardown(
+        {
+          async run() {
+            calls.push("run")
+            throw new Error("crawl failed")
+          },
+          async teardown() {
+            calls.push("teardown")
+          },
+        },
+        ["https://example.gov/"],
+      ),
+    /crawl failed/,
+  )
+  assert.deepEqual(calls, ["run", "teardown"])
 })

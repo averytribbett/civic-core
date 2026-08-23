@@ -9,6 +9,7 @@
       "inboundPhoneNumber": null,
       "prompt": "You are a helpful assistant for Chisago County, Minnesota. Answer using the official county website when possible.",
       "crawlUrl": "https://www.chisagocountymn.gov/",
+      "faqUrl": "https://www.chisagocountymn.gov/1187/FAQS",
       "enabled": true,
       "logoPath": "logos/chisago_county_mn.png",
       "themeColor": "#8a2561"

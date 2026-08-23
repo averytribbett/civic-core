@@ -52,7 +52,7 @@ yarn jurisdiction:sync
 | `type` | `city` or `county` | `country` \| `state` \| `county` \| `city` \| `township` \| `village` |
 | `email` | `info@example.gov` | Required |
 | `prompt` | (system prompt text) | Jurisdiction-specific chat instructions |
-| `crawlUrl` | `https://www.denvergov.org/` | Homepage seed URL for the crawler |
+| `faqUrl` | `https://www.chisagocountymn.gov/faq.aspx` | Optional FAQ page; weekly crawl extracts up to 20 questions and caches English answers |
 | `enabled` | `false` | Weekly job only includes `enabled=true` |
 | `phoneNumber` | `null` | Optional |
 | `logoPath` | `logos/chisago_county_mn.png` | Optional; path relative to `jurisdictions.json`. Local sync copies to `secrets/logos/` and sets `logoUrl`; prod (`LOGO_STORAGE=gcs`) uploads to bucket |

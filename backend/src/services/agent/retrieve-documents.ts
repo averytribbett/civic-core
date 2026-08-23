@@ -8,7 +8,7 @@ import {
 import { createLogger, isProductionLogging, safeLogText } from "../../lib/logger"
 import type { SourcesCollector } from "./sources-collector"
 
-const DEFAULT_SIMILARITY_THRESHOLD = 0.6
+const DEFAULT_SIMILARITY_THRESHOLD = 0.5
 const DEFAULT_CHUNK_LIMIT = 5
 /** Oversample vector hits before soft re-rank + diversity. */
 const VECTOR_OVERSAMPLE = 3

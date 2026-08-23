@@ -2,67 +2,17 @@ import { Request, Response } from "express"
 import { ChatService } from "../../services/agent/chat.service"
 import { buildChatPrompt } from "../../config/prompts"
 import type { ChatSource } from "../../lib/types/chat-source.types"
-import { prisma } from "../../lib/prisma"
-import { encrypt } from "../../lib/encryption"
 import { createLogger, safeLogText } from "../../lib/logger"
+import {
+  FaqService,
+  isEnglishChatLanguage,
+  type CachedFaq,
+} from "../../services/faq/faq.service"
 
 const MAX_MESSAGE_LENGTH = 4000
 
 function writeSse(res: Response, event: string, data: unknown) {
   res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
-}
-
-async function persistChatTurn(opts: {
-  jurisdictionId: string
-  existingConversationId: string | null
-  message: string
-  response: string
-  sources: ChatSource[]
-  language: string | undefined
-  model: string | undefined
-  inputTokens: number | undefined
-  outputTokens: number | undefined
-  responseTime: number
-}): Promise<{ conversationId: string; agentMessageId: string }> {
-  let conversationId = opts.existingConversationId
-  if (conversationId) {
-    const existing = await prisma.conversation.findFirst({
-      where: { id: conversationId, jurisdictionId: opts.jurisdictionId },
-    })
-    if (!existing) conversationId = null
-  }
-  if (!conversationId) {
-    const created = await prisma.conversation.create({
-      data: { jurisdictionId: opts.jurisdictionId },
-    })
-    conversationId = created.id
-  }
-
-  const userContentToStore = encrypt(opts.message)
-  const agentContentToStore = encrypt(opts.response)
-
-  await prisma.message.create({
-    data: {
-      conversationId,
-      role: "user",
-      content: userContentToStore,
-      language: opts.language,
-    },
-  })
-  const agentMsg = await prisma.message.create({
-    data: {
-      conversationId,
-      role: "agent",
-      content: agentContentToStore,
-      model: opts.model ?? undefined,
-      inputTokens: opts.inputTokens ?? undefined,
-      outputTokens: opts.outputTokens ?? undefined,
-      responseTime: opts.responseTime,
-      sources: opts.sources.length > 0 ? opts.sources : undefined,
-    },
-  })
-
-  return { conversationId, agentMessageId: agentMsg.id }
 }
 
 export const chat = async (req: Request, res: Response) => {
@@ -78,6 +28,7 @@ export const chat = async (req: Request, res: Response) => {
       conversationId: existingConversationId,
       language: rawLanguage,
       stream: streamFlag,
+      faqId: rawFaqId,
     } = req.body
 
     const jurisdiction = req.jurisdiction
@@ -138,6 +89,66 @@ export const chat = async (req: Request, res: Response) => {
       typeof existingConversationId === "string"
         ? existingConversationId.trim()
         : null
+    const requestedFaqId =
+      typeof rawFaqId === "string" && rawFaqId.trim() ? rawFaqId.trim() : null
+
+    let faqHit: CachedFaq | null = null
+    if (isEnglishChatLanguage(language)) {
+      try {
+        const faqService = new FaqService(jurisdiction.id)
+        const usedFaqIds = await faqService.loadUsedFaqIds(conversationIdRaw)
+        faqHit = await faqService.resolve({
+          message,
+          faqId: requestedFaqId,
+          usedFaqIds,
+        })
+      } catch (faqErr: unknown) {
+        const err = faqErr instanceof Error ? faqErr : new Error(String(faqErr))
+        chatLog.warn(`faq cache lookup failed: ${err.message}`)
+      }
+    }
+
+    if (faqHit) {
+      const startTime = Date.now()
+      const persisted = await chatService.persistChatTurn({
+        existingConversationId: conversationIdRaw,
+        message,
+        response: faqHit.answer,
+        sources: faqHit.sources,
+        language,
+        model: faqHit.model ?? undefined,
+        inputTokens: undefined,
+        outputTokens: undefined,
+        responseTime: Date.now() - startTime,
+        isFaqCache: true,
+        usedFaqId: faqHit.id,
+      })
+      const responseTime = Date.now() - startTime
+      chatLog.info(
+        `done faqCache=true ms=${responseTime} conversationId=${persisted.conversationId} faqId=${faqHit.id}`,
+      )
+      const donePayload = {
+        response: faqHit.answer,
+        sources: faqHit.sources,
+        conversationId: persisted.conversationId,
+        agentMessageId: persisted.agentMessageId,
+        faqId: faqHit.id,
+      }
+      if (wantStream) {
+        res.status(200)
+        res.setHeader("Content-Type", "text/event-stream; charset=utf-8")
+        res.setHeader("Cache-Control", "no-cache, no-transform")
+        res.setHeader("Connection", "keep-alive")
+        res.setHeader("X-Accel-Buffering", "no")
+        if (typeof res.flushHeaders === "function") {
+          res.flushHeaders()
+        }
+        writeSse(res, "token", { text: faqHit.answer })
+        writeSse(res, "done", donePayload)
+        return res.end()
+      }
+      return res.status(200).json(donePayload)
+    }
 
     if (wantStream) {
       res.status(200)
@@ -176,8 +187,7 @@ export const chat = async (req: Request, res: Response) => {
         }
 
         const responseTime = Date.now() - startTime
-        const persisted = await persistChatTurn({
-          jurisdictionId: jurisdiction.id,
+        const persisted = await chatService.persistChatTurn({
           existingConversationId: conversationIdRaw,
           message,
           response: complete.response,
@@ -219,8 +229,7 @@ export const chat = async (req: Request, res: Response) => {
       await chatService.chat(message, rawHistory)
     const responseTime = Date.now() - startTime
 
-    const persisted = await persistChatTurn({
-      jurisdictionId: jurisdiction.id,
+    const persisted = await chatService.persistChatTurn({
       existingConversationId: conversationIdRaw,
       message,
       response,

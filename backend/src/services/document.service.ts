@@ -1,8 +1,5 @@
 import { PrismaClient } from "../generated/prisma/client"
-import {
-  classifyDocumentKind,
-  type DocumentKind,
-} from "../lib/document-kind"
+import { classifyDocumentKind, type DocumentKind } from "../lib/document-kind"
 import { IngestChunk } from "../lib/types/document.types"
 import pgvector from "pgvector"
 import { randomUUID } from "node:crypto"
@@ -11,7 +8,11 @@ import { prisma } from "../lib/prisma"
 import { logger } from "../lib/logger"
 import { DocumentHashService } from "./document-hash.service"
 import { EmbeddingService } from "./embedding.service"
-import type { HtmlSegment, PageRange, ChunkWithMeta } from "./text-processing.service"
+import type {
+  HtmlSegment,
+  PageRange,
+  ChunkWithMeta,
+} from "./text-processing.service"
 import { TextProcessingService } from "./text-processing.service"
 
 const EMBEDDING_BATCH_SIZE = 100
@@ -305,8 +306,7 @@ export class DocumentService {
       "update",
     )
 
-    counts.skipped +=
-      documents.length - toCreate.length - toUpdate.length
+    counts.skipped += documents.length - toCreate.length - toUpdate.length
     counts.created += toCreate.length
     counts.updated += toUpdate.length
 

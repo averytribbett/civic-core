@@ -109,7 +109,7 @@ Provider-specific API keys must match `LLM_PROVIDER`.
 
 **Jurisdiction crawl config (database):** each row in `jurisdiction` can set `enabled` (include in weekly job), `crawlUrl` (seed URL), and `lastCrawl*` fields updated by the job. New sites should start with `enabled=false` until a manual crawl looks good. Full laptop steps (create row → sync → widget demo picker) are in the [root README](../README.md#add-a-jurisdiction-locally).
 
-**CORS:** the app uses `cors()` with default options (reflective / permissive for browser preflight). Widget access is gated by **`WIDGET_ALLOWED_ORIGINS`** in [`src/lib/widget-origin.ts`](src/lib/widget-origin.ts) (chat, vote, branding).
+**CORS:** the app uses `cors()` with default options (reflective / permissive for browser preflight). Widget access is gated by **`WIDGET_ALLOWED_ORIGINS`** in [`src/lib/widget-origin.ts`](src/lib/widget-origin.ts) (chat, vote, branding, faqs).
 
 ---
 

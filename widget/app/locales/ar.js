@@ -24,4 +24,5 @@
   closeChat: "إغلاق الدردشة",
   sourcesLabel: "المصادر",
   opensInNewTab: "يُفتح في علامة تبويب جديدة",
+  faqSuggestionsLabel: "أسئلة مقترحة",
 };

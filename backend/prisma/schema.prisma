@@ -44,6 +44,8 @@ model Jurisdiction {
   enabled       Boolean           @default(false)
   /// Seed URL for crawls (e.g. https://www.chisagocountymn.gov/)
   crawlUrl      String?
+  /// Official FAQ page used to extract cached questions after each crawl
+  faqUrl        String?
   lastCrawlAt   DateTime?
   lastCrawlStatus String?
   lastCrawlError  String?         @db.Text
@@ -57,6 +59,7 @@ model Jurisdiction {
   documents     Document[]
   conversations Conversation[]
   voiceCalls    VoiceCall[]
+  faqEntries    FaqEntry[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -114,11 +117,35 @@ model Chunk {
   @@map("chunks")
 }
 
+/// Precomputed English FAQ answers for instant widget replies.
+model FaqEntry {
+  id                  String       @id @default(uuid())
+  jurisdictionId      String
+  jurisdiction        Jurisdiction @relation(fields: [jurisdictionId], references: [id], onDelete: Cascade)
+  question            String       @db.Text
+  normalizedQuestion  String
+  answer              String       @db.Text
+  sources             Json?
+  /// Chat LLM that generated `answer`
+  model               String?
+  questionEmbedding   Unsupported("vector(768)")
+  sourceUrl           String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([jurisdictionId, normalizedQuestion])
+  @@index([jurisdictionId])
+  @@map("faq_entries")
+}
+
 // Chat persistence: one conversation per thread, messages in order
 model Conversation {
   id             String       @id @default(uuid())
   jurisdictionId String
   jurisdiction   Jurisdiction @relation(fields: [jurisdictionId], references: [id], onDelete: Restrict)
+  /// FAQ entry ids already served in this thread (cache used at most once)
+  usedFaqIds     String[]     @default([])
   messages       Message[]
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
@@ -141,6 +168,8 @@ model Message {
   responseTime   Int?
   /// Structured citation chips for agent replies (JSON array)
   sources        Json?
+  /// True when the agent reply came from a precomputed FAQ cache hit
+  isFaqCache     Boolean      @default(false)
 
   createdAt      DateTime     @default(now())
 

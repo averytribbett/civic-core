@@ -221,6 +221,23 @@ export class CrawlIngestPipeline {
   }
 }
 
+type CrawlerWithTeardown = {
+  run: (startUrls: string[]) => Promise<unknown>
+  teardown: () => Promise<void>
+}
+
+/** Run a Crawlee crawler, then teardown so persist-state timers cannot hang the process. */
+export async function runCrawlerThenTeardown(
+  crawler: CrawlerWithTeardown,
+  startUrls: string[],
+): Promise<void> {
+  try {
+    await crawler.run(startUrls)
+  } finally {
+    await crawler.teardown()
+  }
+}
+
 /**
  * Crawl a jurisdiction website and upsert documents + embeddings (pipelined).
  */
@@ -426,7 +443,7 @@ export async function runCrawlSync(
     ignoreHttpErrorStatusCodes: [401, 403, 404],
   })
 
-  await crawler.run([url])
+  await runCrawlerThenTeardown(crawler, [url])
 
   const upsertResult = await pipeline.finalize()
   const durationMs = Date.now() - startTime

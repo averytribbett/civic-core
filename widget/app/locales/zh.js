@@ -24,4 +24,5 @@
   closeChat: "关闭聊天",
   sourcesLabel: "来源",
   opensInNewTab: "在新标签页中打开",
+  faqSuggestionsLabel: "建议的问题",
 };

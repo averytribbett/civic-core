@@ -24,4 +24,5 @@
   closeChat: "채팅 닫기",
   sourcesLabel: "출처",
   opensInNewTab: "새 탭에서 열림",
+  faqSuggestionsLabel: "추천 질문",
 };

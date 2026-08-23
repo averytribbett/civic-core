@@ -1,6 +1,7 @@
 import "dotenv/config"
 import { prisma } from "../lib/prisma"
 import { runCrawlSync } from "../services/crawl-sync.service"
+import { FaqSyncService } from "../services/faq/faq-sync.service"
 import { logger } from "../lib/logger"
 import { config } from "../config"
 
@@ -35,6 +36,8 @@ async function syncOneJurisdiction(jurisdiction: {
   id: string
   source: string
   crawlUrl: string | null
+  faqUrl: string | null
+  prompt: string
 }): Promise<void> {
   const crawlUrl = jurisdiction.crawlUrl
   if (!crawlUrl) {
@@ -66,6 +69,32 @@ async function syncOneJurisdiction(jurisdiction: {
     deleted: result.deleted,
     skipped: result.skipped,
   })
+
+  if (jurisdiction.faqUrl) {
+    try {
+      const faqResult = await new FaqSyncService(
+        jurisdiction.id,
+        jurisdiction.faqUrl,
+        jurisdiction.prompt,
+        jurisdiction.source,
+      ).sync()
+      logger.json("info", {
+        event: "faq_cache_sync",
+        source: jurisdiction.source,
+        status: "success",
+        extracted: faqResult.extracted,
+        stored: faqResult.stored,
+      })
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error))
+      logger.json("warn", {
+        event: "faq_cache_sync",
+        source: jurisdiction.source,
+        status: "error",
+        error: err.message,
+      })
+    }
+  }
 }
 
 async function main(): Promise<void> {
@@ -77,9 +106,7 @@ async function main(): Promise<void> {
   const jurisdictions = await prisma.jurisdiction.findMany({
     where: {
       crawlUrl: { not: null },
-      ...(sourceFilter
-        ? { source: sourceFilter }
-        : { enabled: true }),
+      ...(sourceFilter ? { source: sourceFilter } : { enabled: true }),
     },
     orderBy: { source: "asc" },
   })
@@ -174,5 +201,11 @@ main()
     process.exitCode = 1
   })
   .finally(async () => {
-    await prisma.$disconnect()
+    try {
+      await prisma.$disconnect()
+    } finally {
+      // Crawlee persist-state timers and OpenAI keep-alive sockets otherwise
+      // leave the CLI hanging after crawl_sync_complete.
+      process.exit()
+    }
   })

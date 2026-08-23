@@ -12,6 +12,8 @@ import { StructuredToolInterface } from "@langchain/core/tools"
 import type { ChatSource } from "../../lib/types/chat-source.types"
 import { createLogger, isProductionLogging, safeLogText } from "../../lib/logger"
 import { config } from "../../config"
+import { encrypt } from "../../lib/encryption"
+import { prisma } from "../../lib/prisma"
 import { createSearchWebsiteDocumentsTool } from "./tools/search-website-documents"
 import { SourcesCollector } from "./sources-collector"
 
@@ -32,6 +34,25 @@ type ChatResult = {
   model: string | undefined
   inputTokens: number | undefined
   outputTokens: number | undefined
+}
+
+export type PersistChatTurnInput = {
+  existingConversationId: string | null
+  message: string
+  response: string
+  sources: ChatSource[]
+  language: string | undefined
+  model: string | undefined
+  inputTokens: number | undefined
+  outputTokens: number | undefined
+  responseTime: number
+  isFaqCache?: boolean
+  usedFaqId?: string
+}
+
+export type PersistChatTurnResult = {
+  conversationId: string
+  agentMessageId: string
 }
 
 function messageContentToString(content: unknown): string {
@@ -58,6 +79,7 @@ function messageContentToString(content: unknown): string {
 export class ChatService {
   private llm: BoundLLM
   private model?: string
+  private readonly jurisdictionId: string
   private readonly logSource: string
   private readonly systemPrompt: string
   private searchTool: StructuredToolInterface
@@ -96,6 +118,7 @@ export class ChatService {
   }
 
   constructor(jurisdictionId: string, systemPrompt: string, logSource?: string) {
+    this.jurisdictionId = jurisdictionId
     this.logSource = logSource ?? jurisdictionId
     this.systemPrompt = systemPrompt
     this.model = config.llm.model
@@ -429,5 +452,57 @@ export class ChatService {
       inputTokens: inputTokens > 0 ? inputTokens : undefined,
       outputTokens: outputTokens > 0 ? outputTokens : undefined,
     }
+  }
+
+  async persistChatTurn(
+    opts: PersistChatTurnInput,
+  ): Promise<PersistChatTurnResult> {
+    let conversationId = opts.existingConversationId
+    if (conversationId) {
+      const existing = await prisma.conversation.findFirst({
+        where: { id: conversationId, jurisdictionId: this.jurisdictionId },
+      })
+      if (!existing) conversationId = null
+    }
+    if (!conversationId) {
+      const created = await prisma.conversation.create({
+        data: { jurisdictionId: this.jurisdictionId },
+      })
+      conversationId = created.id
+    }
+
+    const userContentToStore = encrypt(opts.message)
+    const agentContentToStore = encrypt(opts.response)
+
+    await prisma.message.create({
+      data: {
+        conversationId,
+        role: "user",
+        content: userContentToStore,
+        language: opts.language,
+      },
+    })
+    const agentMsg = await prisma.message.create({
+      data: {
+        conversationId,
+        role: "agent",
+        content: agentContentToStore,
+        model: opts.model ?? undefined,
+        inputTokens: opts.inputTokens ?? undefined,
+        outputTokens: opts.outputTokens ?? undefined,
+        responseTime: opts.responseTime,
+        sources: opts.sources.length > 0 ? opts.sources : undefined,
+        isFaqCache: opts.isFaqCache ?? false,
+      },
+    })
+
+    if (opts.usedFaqId) {
+      await prisma.conversation.update({
+        where: { id: conversationId },
+        data: { usedFaqIds: { push: opts.usedFaqId } },
+      })
+    }
+
+    return { conversationId, agentMessageId: agentMsg.id }
   }
 }

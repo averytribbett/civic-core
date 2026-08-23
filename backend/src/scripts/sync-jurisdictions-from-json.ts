@@ -33,6 +33,7 @@ const jurisdictionSchema = z.object({
   inboundPhoneNumber: z.string().trim().min(1).nullable().optional(),
   prompt: z.string().trim().min(1),
   crawlUrl: z.string().trim().url().nullable().optional(),
+  faqUrl: z.string().trim().url().nullable().optional(),
   enabled: z.boolean().optional().default(false),
   /** Path to logo image (relative to the JSON file). Dev: copies locally + sets logoUrl. Prod (LOGO_STORAGE=gcs): uploads to bucket. */
   logoPath: z.string().trim().min(1).optional(),
@@ -100,8 +101,7 @@ async function loadFile(filePath: string): Promise<JurisdictionInput[]> {
       try {
         e164 = requireE164(row.inboundPhoneNumber)
       } catch (error: unknown) {
-        const message =
-          error instanceof Error ? error.message : String(error)
+        const message = error instanceof Error ? error.message : String(error)
         throw new Error(
           `Invalid inboundPhoneNumber for "${row.source}": ${message}`,
         )
@@ -126,6 +126,7 @@ function dataFromInput(row: JurisdictionInput) {
     inboundPhoneNumber: string | null
     prompt: string
     crawlUrl: string | null
+    faqUrl: string | null
     enabled: boolean
     logoUrl?: string
     themeColor?: string
@@ -137,6 +138,7 @@ function dataFromInput(row: JurisdictionInput) {
     inboundPhoneNumber: row.inboundPhoneNumber ?? null,
     prompt: row.prompt,
     crawlUrl: row.crawlUrl ?? null,
+    faqUrl: row.faqUrl ?? null,
     enabled: row.enabled ?? false,
   }
   if (row.themeColor) data.themeColor = row.themeColor

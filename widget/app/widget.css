@@ -774,6 +774,56 @@ body {
   font-weight: 500;
 }
 
+.faq-suggestions {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  margin: 0 0 8px;
+  padding: 6px;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow:
+    0 10px 20px -8px rgba(15, 23, 42, 0.16),
+    0 4px 10px -4px rgba(var(--chat-primary-rgb), 0.12);
+  max-height: 220px;
+  overflow-y: auto;
+  z-index: 4;
+}
+
+.faq-suggestions[hidden] {
+  display: none;
+}
+
+.faq-suggestion {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #1e293b;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+}
+
+.faq-suggestion[aria-selected="true"],
+.faq-suggestion:hover {
+  background: rgba(var(--chat-primary-rgb), 0.1);
+}
+
+.faq-suggestion strong {
+  font-weight: 700;
+  color: #0f172a;
+}
+
 .send-btn {
   position: absolute;
   right: 10px;
@@ -956,6 +1006,10 @@ html.is-mobile #input {
   align-self: flex-end;
   border-bottom-left-radius: 14px;
   border-bottom-right-radius: 4px;
+}
+
+[dir="rtl"] .faq-suggestion {
+  text-align: right;
 }
 
 [dir="rtl"] .input-form {
