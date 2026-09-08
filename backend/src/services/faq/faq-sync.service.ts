@@ -4,11 +4,13 @@ import { config } from "../../config"
 import { buildChatPrompt } from "../../config/prompts"
 import { mapPool } from "../../lib/concurrency"
 import { createLogger } from "../../lib/logger"
+import type { ChatSource } from "../../lib/types/chat-source.types"
 import { ChatService } from "../agent/chat.service"
 import { EmbeddingService } from "../embedding.service"
 import {
   FaqService,
   normalizeFaqQuestion,
+  usableFaqSources,
   type FaqUpsertRow,
 } from "./faq.service"
 
@@ -21,6 +23,12 @@ const LLM_MAX_TOKENS = 2000
 export type FaqSyncResult = {
   extracted: number
   stored: number
+}
+
+export type FaqRefreshResult = {
+  total: number
+  updated: number
+  withSources: number
 }
 
 function messageContentToString(content: unknown): string {
@@ -84,27 +92,9 @@ export class FaqSyncService {
       questions,
       FAQ_GENERATE_CONCURRENCY,
       async (question) => {
-        try {
-          const chatService = new ChatService(
-            this.jurisdictionId,
-            buildChatPrompt(this.prompt, { date: new Date() }),
-            this.logSource,
-          )
-          const result = await chatService.chat(question)
-          if (!result.response.trim()) return null
-          return {
-            question,
-            answer: result.response,
-            sources: result.sources,
-            model: result.model ?? null,
-          }
-        } catch (error: unknown) {
-          const err = error instanceof Error ? error : new Error(String(error))
-          log.warn(
-            `faq generate failed question=${JSON.stringify(question.slice(0, 80))} ${err.message}`,
-          )
-          return null
-        }
+        const generatedAnswer = await this.generateAnswer(question, log)
+        if (!generatedAnswer) return null
+        return { question, ...generatedAnswer }
       },
     )
 
@@ -141,6 +131,70 @@ export class FaqSyncService {
     const kept = await faqService.replaceEntries(upserts)
     log.info(`faq cache stored=${kept.length} extracted=${questions.length}`)
     return { extracted: questions.length, stored: kept.length }
+  }
+
+  async refreshAnswers(): Promise<FaqRefreshResult> {
+    const log = createLogger("faq-refresh", this.logSource)
+    const faqService = new FaqService(this.jurisdictionId)
+    const existing = await faqService.listExistingQuestions()
+    if (existing.length === 0) {
+      log.info("faq refresh found no existing questions")
+      return { total: 0, updated: 0, withSources: 0 }
+    }
+
+    const generated = await mapPool(
+      existing,
+      FAQ_GENERATE_CONCURRENCY,
+      async (entry) => {
+        const generatedAnswer = await this.generateAnswer(entry.question, log)
+        if (!generatedAnswer) return null
+        await faqService.updateGeneratedAnswer(entry.id, generatedAnswer)
+        return generatedAnswer
+      },
+    )
+
+    const updated = generated.filter(
+      (row): row is NonNullable<typeof row> => row != null,
+    )
+    const withSources = updated.filter((row) => row.sources != null).length
+    log.info(
+      `faq refresh updated=${updated.length} withSources=${withSources} total=${existing.length}`,
+    )
+    return {
+      total: existing.length,
+      updated: updated.length,
+      withSources,
+    }
+  }
+
+  private async generateAnswer(
+    question: string,
+    log: { warn: (message: string) => void },
+  ): Promise<{
+    answer: string
+    sources: ChatSource[] | null
+    model: string | null
+  } | null> {
+    try {
+      const chatService = new ChatService(
+        this.jurisdictionId,
+        buildChatPrompt(this.prompt, { date: new Date() }),
+        this.logSource,
+      )
+      const result = await chatService.chat(question)
+      if (!result.response.trim()) return null
+      return {
+        answer: result.response,
+        sources: usableFaqSources(result.sources),
+        model: result.model ?? null,
+      }
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error))
+      log.warn(
+        `faq generate failed question=${JSON.stringify(question.slice(0, 80))} ${err.message}`,
+      )
+      return null
+    }
   }
 
   private async fetchFaqPage(): Promise<string> {
@@ -186,7 +240,7 @@ export class FaqSyncService {
         effort: "high",
       },
     }
-    
+
     return new ChatOpenAI(openaiOpts)
   }
 

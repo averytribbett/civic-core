@@ -6,6 +6,7 @@ import { createLogger, safeLogText } from "../../lib/logger"
 import {
   FaqService,
   isEnglishChatLanguage,
+  isUsableCachedFaq,
   type CachedFaq,
 } from "../../services/faq/faq.service"
 
@@ -102,6 +103,7 @@ export const chat = async (req: Request, res: Response) => {
           faqId: requestedFaqId,
           usedFaqIds,
         })
+        if (faqHit && !isUsableCachedFaq(faqHit)) faqHit = null
       } catch (faqErr: unknown) {
         const err = faqErr instanceof Error ? faqErr : new Error(String(faqErr))
         chatLog.warn(`faq cache lookup failed: ${err.message}`)

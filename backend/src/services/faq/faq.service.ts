@@ -23,7 +23,7 @@ export type FaqUpsertRow = {
   question: string
   normalizedQuestion: string
   answer: string
-  sources: ChatSource[]
+  sources: ChatSource[] | null
   model: string | null
   embedding: number[]
   sourceUrl: string
@@ -66,6 +66,48 @@ function parseSources(raw: unknown): ChatSource[] {
   })
 }
 
+export function faqHasSources(raw: unknown): boolean {
+  return parseSources(raw).length > 0
+}
+
+export function usableFaqSources(
+  sources: ChatSource[] | null | undefined,
+): ChatSource[] | null {
+  const parsed = parseSources(sources)
+  return parsed.length > 0 ? parsed : null
+}
+
+export function serializeFaqSources(
+  sources: ChatSource[] | null | undefined,
+): string | null {
+  const usable = usableFaqSources(sources)
+  return usable ? JSON.stringify(usable) : null
+}
+
+export function isUsableCachedFaq(faq: Pick<CachedFaq, "sources">): boolean {
+  return faq.sources.length > 0
+}
+
+const FAQ_SOURCES_PRESENT_SQL = `"sources" IS NOT NULL AND jsonb_typeof("sources") = 'array' AND jsonb_array_length("sources") > 0`
+
+function toCachedFaq(row: {
+  id: string
+  question: string
+  answer: string
+  sources: unknown
+  model: string | null
+}): CachedFaq | null {
+  const sources = parseSources(row.sources)
+  if (sources.length === 0) return null
+  return {
+    id: row.id,
+    question: row.question,
+    answer: row.answer,
+    sources,
+    model: row.model,
+  }
+}
+
 export class FaqService {
   private readonly jurisdictionId: string
 
@@ -74,6 +116,17 @@ export class FaqService {
   }
 
   async listQuestions(): Promise<FaqListItem[]> {
+    const rows = await prisma.faqEntry.findMany({
+      where: { jurisdictionId: this.jurisdictionId },
+      select: { id: true, question: true, sources: true },
+      orderBy: { question: "asc" },
+    })
+    return rows
+      .filter((row) => faqHasSources(row.sources))
+      .map(({ id, question }) => ({ id, question }))
+  }
+
+  async listExistingQuestions(): Promise<FaqListItem[]> {
     return prisma.faqEntry.findMany({
       where: { jurisdictionId: this.jurisdictionId },
       select: { id: true, question: true },
@@ -93,13 +146,7 @@ export class FaqService {
       },
     })
     if (!row) return null
-    return {
-      id: row.id,
-      question: row.question,
-      answer: row.answer,
-      sources: parseSources(row.sources),
-      model: row.model,
-    }
+    return toCachedFaq(row)
   }
 
   async loadUsedFaqIds(conversationId: string | null): Promise<string[]> {
@@ -145,6 +192,7 @@ export class FaqService {
         FROM "faq_entries"
         WHERE "jurisdictionId" = $2
           AND 1 - ("questionEmbedding" <=> $1::vector) >= $3
+          AND ${FAQ_SOURCES_PRESENT_SQL}
           ${usedClause}
         ORDER BY "questionEmbedding" <=> $1::vector
         LIMIT 1
@@ -154,13 +202,7 @@ export class FaqService {
 
     const row = rows[0]
     if (!row) return null
-    return {
-      id: row.id,
-      question: row.question,
-      answer: row.answer,
-      sources: parseSources(row.sources),
-      model: row.model,
-    }
+    return toCachedFaq(row)
   }
 
   async resolve(opts: {
@@ -196,7 +238,7 @@ export class FaqService {
       })
       const id = existing?.id ?? randomUUID()
       const embeddingSql = pgvector.toSql(row.embedding)
-      const sourcesJson = JSON.stringify(row.sources)
+      const sourcesJson = serializeFaqSources(row.sources)
 
       await prisma.$executeRawUnsafe(
         `
@@ -248,5 +290,33 @@ export class FaqService {
     )
 
     return keptIds
+  }
+
+  async updateGeneratedAnswer(
+    id: string,
+    data: {
+      answer: string
+      sources: ChatSource[] | null
+      model: string | null
+    },
+  ): Promise<void> {
+    await prisma.$executeRawUnsafe(
+      `
+        UPDATE "faq_entries"
+        SET
+          "answer" = $3,
+          "sources" = $4::jsonb,
+          "model" = $5,
+          "updatedAt" = $6
+        WHERE "id" = $1
+          AND "jurisdictionId" = $2
+      `,
+      id,
+      this.jurisdictionId,
+      data.answer,
+      serializeFaqSources(data.sources),
+      data.model,
+      new Date(),
+    )
   }
 }
