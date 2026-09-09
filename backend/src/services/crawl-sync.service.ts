@@ -9,7 +9,9 @@ import {
   type UpsertDocumentsResult,
 } from "./document.service"
 import { TextProcessingService } from "./text-processing.service"
-import { createLogger } from "../lib/logger"
+import { createLogger, type Logger } from "../lib/logger"
+
+type CrawlPipelineLogger = Omit<Logger, "json">
 
 export type RunCrawlSyncInput = {
   url: string
@@ -31,6 +33,51 @@ const SKIP_MIME_TYPES = [
 
 /** Pages buffered before embed/upsert during crawl. */
 const PIPELINE_BATCH_SIZE = 50
+
+const CRAWL_USER_AGENTS = [
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+]
+
+function parseCrawlInt(raw: string | undefined, fallback: number): number {
+  if (!raw?.trim()) return fallback
+  const n = Number.parseInt(raw, 10)
+  return Number.isFinite(n) && n > 0 ? n : fallback
+}
+
+function parseCrawlDelay(raw: string | undefined, fallback: number): number {
+  if (!raw?.trim()) return fallback
+  const n = Number.parseFloat(raw)
+  return Number.isFinite(n) && n >= 0 ? n : fallback
+}
+
+const CRAWL_MAX_CONCURRENCY = parseCrawlInt(process.env.CRAWL_MAX_CONCURRENCY, 5)
+const CRAWL_SAME_DOMAIN_DELAY_SECS = parseCrawlDelay(
+  process.env.CRAWL_SAME_DOMAIN_DELAY_SECS,
+  0.5,
+)
+const CRAWL_SESSION_POOL_SIZE = parseCrawlInt(
+  process.env.CRAWL_SESSION_POOL_SIZE,
+  10,
+)
+const CRAWL_PROGRESS_INTERVAL = parseCrawlInt(
+  process.env.CRAWL_PROGRESS_INTERVAL,
+  100,
+)
+
+function pickUserAgent(sessionId: string | undefined): string {
+  if (!sessionId || CRAWL_USER_AGENTS.length === 0) {
+    return CRAWL_USER_AGENTS[0]!
+  }
+  let hash = 0
+  for (let i = 0; i < sessionId.length; i++) {
+    hash = (hash + sessionId.charCodeAt(i)) % CRAWL_USER_AGENTS.length
+  }
+  return CRAWL_USER_AGENTS[hash]!
+}
 
 function isSkippedMimeType(type: string | undefined): boolean {
   return Boolean(type && SKIP_MIME_TYPES.some((skip) => type.includes(skip)))
@@ -168,7 +215,7 @@ export class CrawlIngestPipeline {
   private readonly buffer: CrawlPageDocument[] = []
   private readonly existingByUrl = new Map<
     string,
-    { id: string; hash: string }
+    { id: string; hash: string | null }
   >()
   private readonly totals: UpsertDocumentsResult = {
     created: 0,
@@ -176,6 +223,7 @@ export class CrawlIngestPipeline {
     deleted: 0,
     skipped: 0,
   }
+  private flushChain: Promise<void> = Promise.resolve()
 
   constructor(
     private readonly jurisdictionId: string,
@@ -183,7 +231,12 @@ export class CrawlIngestPipeline {
     /** Canonical URLs successfully queued for ingest (one row per page). */
     private readonly crawledPageUrls: Set<string>,
     private readonly documentService: CrawlIngestDocumentService = new DocumentService(),
+    private readonly log?: CrawlPipelineLogger,
   ) {}
+
+  getTotals(): Readonly<UpsertDocumentsResult> {
+    return this.totals
+  }
 
   async push(doc: CrawlPageDocument): Promise<void> {
     const normalizedUrl = normalizeUrl(doc.url)
@@ -195,13 +248,18 @@ export class CrawlIngestPipeline {
     this.crawledPageUrls.add(normalizedUrl)
     this.buffer.push({ ...doc, url: normalizedUrl })
     if (this.buffer.length >= this.batchSize) {
-      await this.flush()
+      this.scheduleFlush()
     }
+  }
+
+  private scheduleFlush(): void {
+    this.flushChain = this.flushChain.then(() => this.flush())
   }
 
   async flush(): Promise<void> {
     if (this.buffer.length === 0) return
     const batch = this.buffer.splice(0, this.buffer.length)
+    const flushStart = Date.now()
     const result = await this.documentService.upsertDocumentsBatch(
       { jurisdictionId: this.jurisdictionId, documents: batch },
       this.existingByUrl,
@@ -209,10 +267,16 @@ export class CrawlIngestPipeline {
     this.totals.created += result.created
     this.totals.updated += result.updated
     this.totals.skipped += result.skipped
+    this.log?.info(
+      `pipeline_flush batch=${batch.length} created=${result.created} updated=${result.updated} skipped=${result.skipped} durationMs=${Date.now() - flushStart}`,
+    )
   }
 
   async finalize(): Promise<UpsertDocumentsResult> {
-    await this.flush()
+    if (this.buffer.length > 0) {
+      this.scheduleFlush()
+    }
+    await this.flushChain
     this.totals.deleted = await this.documentService.deleteStaleDocuments(
       this.jurisdictionId,
       this.crawledPageUrls,
@@ -258,17 +322,38 @@ export async function runCrawlSync(
   const textProcessingService = new TextProcessingService()
   const urlRegistry = new CrawlUrlRegistry()
   const crawledPageUrls = new Set<string>()
+  const log = createLogger("crawl", logSource)
   const pipeline = new CrawlIngestPipeline(
     jurisdictionId,
     PIPELINE_BATCH_SIZE,
     crawledPageUrls,
+    new DocumentService(),
+    log,
   )
-  const log = createLogger("crawl", logSource)
   let pageFailures = 0
   let meetingDumpSkipped = 0
   let emptyTextSkipped = 0
   let botBlocked = 0
   let noiseUrlSkipped = 0
+  let lastProgressLoggedAt = 0
+
+  const maybeLogProgress = (): void => {
+    const pages = crawledPageUrls.size
+    if (pages === 0 || pages - lastProgressLoggedAt < CRAWL_PROGRESS_INTERVAL) {
+      return
+    }
+    lastProgressLoggedAt =
+      Math.floor(pages / CRAWL_PROGRESS_INTERVAL) * CRAWL_PROGRESS_INTERVAL
+    const totals = pipeline.getTotals()
+    log.info(
+      `progress pages=${pages} elapsedMs=${Date.now() - startTime} created=${totals.created} updated=${totals.updated} skipped=${totals.skipped} botBlocked=${botBlocked} pageFailures=${pageFailures} meetingDumpSkipped=${meetingDumpSkipped} noiseUrlSkipped=${noiseUrlSkipped}`,
+    )
+  }
+
+  const ingestPage = async (doc: CrawlPageDocument): Promise<void> => {
+    await pipeline.push(doc)
+    maybeLogProgress()
+  }
 
   // Crawlee defaults to INFO (per-request noise). Keep warnings/errors only.
   crawleeLog.setLevel(LogLevel.WARNING)
@@ -319,13 +404,15 @@ export async function runCrawlSync(
 
       if (typeof $ !== "function") {
         if (mimeType.includes("pdf")) {
-          const { text, pageMap } =
-            await textProcessingService.extractPdfText(normalized)
+          const pdfData = Buffer.isBuffer(body) ? body : undefined
+          const { text, pageMap } = pdfData
+            ? await textProcessingService.extractPdfTextFromBuffer(pdfData)
+            : await textProcessingService.extractPdfText(normalized)
           if (!text.trim()) {
             emptyTextSkipped += 1
             return
           }
-          await pipeline.push({
+          await ingestPage({
             url: normalized,
             text,
             title: null,
@@ -352,7 +439,7 @@ export async function runCrawlSync(
         if (!structured.text.trim()) {
           emptyTextSkipped += 1
         } else {
-          await pipeline.push({
+          await ingestPage({
             url: normalized,
             text: structured.text,
             title: structured.title,
@@ -371,7 +458,7 @@ export async function runCrawlSync(
         if (!text.trim()) {
           emptyTextSkipped += 1
         } else {
-          await pipeline.push({
+          await ingestPage({
             url: normalized,
             text,
             title,
@@ -400,7 +487,7 @@ export async function runCrawlSync(
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ],
     preNavigationHooks: [
-      async ({ request }) => {
+      async ({ request, session }) => {
         const requestUrl = request.loadedUrl ?? request.url
         const hostname = tryGetHostname(requestUrl)
         if (hostname && !hostnamesEquivalent(hostname, allowedHostname)) {
@@ -417,10 +504,7 @@ export async function runCrawlSync(
         }
         request.headers = {
           ...request.headers,
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
-            "AppleWebKit/537.36 (KHTML, like Gecko) " +
-            "Chrome/121.0.0.0 Safari/537.36",
+          "User-Agent": pickUserAgent(session?.id),
           Accept:
             "text/html,application/xhtml+xml,application/xml,application/pdf,image/jpeg;q=0.9,*/*;q=0.8",
           "Accept-Language": "en-US,en;q=0.9",
@@ -434,12 +518,14 @@ export async function runCrawlSync(
     ],
     maxRequestRetries: 5,
     requestHandlerTimeoutSecs: 60,
-    // Denver (and similar WAFs) rate-limit aggressive parallel crawls.
-    maxConcurrency: 2,
+    maxConcurrency: CRAWL_MAX_CONCURRENCY,
     minConcurrency: 1,
-    sameDomainDelaySecs: 1.5,
+    sameDomainDelaySecs: CRAWL_SAME_DOMAIN_DELAY_SECS,
     useSessionPool: true,
     persistCookiesPerSession: true,
+    sessionPoolOptions: {
+      maxPoolSize: CRAWL_SESSION_POOL_SIZE,
+    },
     ignoreHttpErrorStatusCodes: [401, 403, 404],
   })
 

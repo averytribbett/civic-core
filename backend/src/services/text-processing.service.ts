@@ -1,4 +1,4 @@
-import { PDFParse } from "pdf-parse"
+import { PDFParse, type TextResult } from "pdf-parse"
 
 // ~2 chars/token; 2k chars keeps chunks embed-friendly and improves RAG retrieval granularity
 const CHUNK_SIZE = 2000
@@ -184,9 +184,7 @@ export class TextProcessingService {
     return { title, text, segments: finalSegments }
   }
 
-  extractPdfText = async (url: string): Promise<ExtractPdfResult> => {
-    const parser = new PDFParse({ url })
-    const parsedPdf = await parser.getText()
+  private buildExtractPdfResult(parsedPdf: TextResult): ExtractPdfResult {
     const pageMap: PageRange[] = []
     const parts: string[] = []
     let pos = 0
@@ -213,6 +211,29 @@ export class TextProcessingService {
         : (parsedPdf.text ?? "").replace(/\s+/g, " ").trim()
 
     return { text, pageMap }
+  }
+
+  extractPdfText = async (url: string): Promise<ExtractPdfResult> => {
+    const parser = new PDFParse({ url })
+    try {
+      const parsedPdf = await parser.getText()
+      return this.buildExtractPdfResult(parsedPdf)
+    } finally {
+      await parser.destroy()
+    }
+  }
+
+  /** Parse PDF bytes already fetched by the crawler (avoids a second HTTP download). */
+  extractPdfTextFromBuffer = async (
+    data: Buffer | Uint8Array,
+  ): Promise<ExtractPdfResult> => {
+    const parser = new PDFParse({ data })
+    try {
+      const parsedPdf = await parser.getText()
+      return this.buildExtractPdfResult(parsedPdf)
+    } finally {
+      await parser.destroy()
+    }
   }
 
   chunkText(text: string): string[] {

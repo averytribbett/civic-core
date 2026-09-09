@@ -252,7 +252,7 @@ export class DocumentService {
    */
   async upsertDocumentsBatch(
     input: UpsertDocumentInput,
-    existingByUrl: Map<string, { id: string; hash: string }>,
+    existingByUrl: Map<string, { id: string; hash: string | null }>,
   ): Promise<UpsertDocumentsResult> {
     const counts: UpsertDocumentsResult = {
       created: 0,
@@ -273,7 +273,7 @@ export class DocumentService {
         select: { id: true, url: true, hash: true },
       })
       for (const d of found) {
-        existingByUrl.set(d.url, { id: d.id, hash: d.hash ?? "" })
+        existingByUrl.set(d.url, { id: d.id, hash: d.hash ?? null })
       }
     }
 
@@ -400,7 +400,7 @@ export class DocumentService {
     input: UpsertDocumentInput,
   ): Promise<UpsertDocumentsResult> {
     const DOCUMENT_BATCH_SIZE = 100
-    const existingByUrl = new Map<string, { id: string; hash: string }>()
+    const existingByUrl = new Map<string, { id: string; hash: string | null }>()
     const totals: UpsertDocumentsResult = {
       created: 0,
       updated: 0,

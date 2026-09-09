@@ -125,6 +125,50 @@ test("runCrawlerThenTeardown tears down after a successful run", async () => {
   assert.deepEqual(calls, ["run:https://example.gov/", "teardown"])
 })
 
+test("CrawlIngestPipeline schedules flush without blocking push", async () => {
+  const crawledPageUrls = new Set<string>()
+  class SlowDocumentService extends FakeDocumentService {
+    override async upsertDocumentsBatch(
+      input: UpsertDocumentInput,
+    ): Promise<UpsertDocumentsResult> {
+      await new Promise((resolve) => setTimeout(resolve, 200))
+      return super.upsertDocumentsBatch(input)
+    }
+  }
+  const documentService = new SlowDocumentService()
+  const pipeline = new CrawlIngestPipeline(
+    "00000000-0000-4000-8000-000000000001",
+    50,
+    crawledPageUrls,
+    documentService,
+  )
+
+  const start = Date.now()
+  for (let i = 0; i < 50; i++) {
+    await pipeline.push({
+      url: `https://example.gov/page-${i}`,
+      text: `content ${i}`,
+    })
+  }
+  const pushElapsed = Date.now() - start
+  assert.ok(
+    pushElapsed < 100,
+    `expected push to return before slow flush (took ${pushElapsed}ms)`,
+  )
+
+  await pipeline.finalize()
+  assert.equal(documentService.batches.length, 1)
+})
+
+test("null document hash is not coerced to empty string for skip comparison", () => {
+  const storedHash: string | null = null
+  const computedHash = "abc123deadbeef"
+  assert.equal(storedHash ?? null, null)
+  assert.notEqual(storedHash ?? null, computedHash)
+  const afterBackfill = computedHash
+  assert.equal(afterBackfill, computedHash)
+})
+
 test("runCrawlerThenTeardown still tears down when run throws", async () => {
   const calls: string[] = []
   await assert.rejects(

@@ -317,7 +317,20 @@ gcloud run jobs create civic-core-crawl-sync \
   --set-env-vars "DATABASE_URL=<YOUR_DATABASE_URL>,OPENAI_API_KEY=<KEY>"
 ```
 
-Prefer Secret Manager for `DATABASE_URL` and `OPENAI_API_KEY` instead of plain `--set-env-vars` in production. Use **`task-timeout 10800`** (3 hours) or higher if a single county needs more time.
+Prefer Secret Manager for `DATABASE_URL` and `OPENAI_API_KEY` instead of plain `--set-env-vars` in production.
+
+**Task timeout:** use **`task-timeout 10800`** (3 hours) for small counties (~1k pages). Large city sites (e.g. Denver, 8k+ pages) need **`28800–43200`** (8–12 hours) so the job can finish in the background. Each jurisdiction runs as a separate parallel job execution, so set timeout per your largest enabled site.
+
+**Crawl tuning (optional env vars on the job):**
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `CRAWL_MAX_CONCURRENCY` | `5` | Parallel HTTP workers |
+| `CRAWL_SAME_DOMAIN_DELAY_SECS` | `0.5` | Minimum delay between same-domain requests |
+| `CRAWL_SESSION_POOL_SIZE` | `10` | Distinct cookie/session pool size (rotates User-Agent per session) |
+| `CRAWL_PROGRESS_INTERVAL` | `100` | Log `progress` every N ingested pages |
+
+During a crawl, look for `progress pages=...` and `pipeline_flush` lines in logs; the final `done` line includes created/updated/skipped counts.
 
 **2. Scheduler service account** (if you do not already have one):
 
@@ -391,7 +404,7 @@ The job emits **JSON logs** to Cloud Logging:
 | `event` | Meaning |
 |---------|---------|
 | `crawl_sync_start` | Run started; lists `sources` |
-| `crawl_pipeline_flush` | Pipelined upsert batch during crawl |
+| `pipeline_flush` / `progress` | Pipelined upsert batch; periodic ingest progress (every 100 pages by default) |
 | `crawl_sync_jurisdiction` | Per-site result (`success` / `error`, counts, `durationMs`) |
 | `crawl_sync_complete` | Run finished (`success` or `partial_failure`) |
 | `crawl_sync_fatal` | Job crashed before finishing |
