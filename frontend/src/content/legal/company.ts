@@ -7,7 +7,7 @@ export const LEGAL_ENTITY = {
   postalCode: '55056',
   country: 'United States',
   email: 'hello@civiccore.ai',
-  privacyEmail: 'avery@civiccore.ai',
+  privacyEmail: 'hello@civiccore.ai',
   website: 'https://civiccore.ai',
   widgetOrigin: 'https://app.civiccore.ai',
 } as const

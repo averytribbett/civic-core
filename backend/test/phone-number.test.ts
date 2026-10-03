@@ -25,8 +25,8 @@ test("normalizeE164 formats messy runtime inputs for DB lookup", () => {
     "+16515550100",
   )
   assert.equal(
-    normalizeE164("<sip:+16516503980@pstn.twilio.com>"),
-    "+16516503980",
+    normalizeE164("<sip:+16515550180@pstn.twilio.com>"),
+    "+16515550180",
   )
 })
 
@@ -47,14 +47,14 @@ test("calledNumberFromSipHeaders prefers Diversion over OpenAI To", () => {
     },
     {
       name: "Diversion",
-      value: "<sip:+16516503980@pstn.twilio.com>;reason=unconditional",
+      value: "<sip:+16515550180@pstn.twilio.com>;reason=unconditional",
     },
     {
       name: "From",
       value: "sip:+15551234567@carrier.com",
     },
   ])
-  assert.equal(number, "+16516503980")
+  assert.equal(number, "+16515550180")
 })
 
 test("calledNumberFromSipHeaders reads To when it is a PSTN number", () => {
