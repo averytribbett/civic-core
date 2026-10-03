@@ -97,6 +97,7 @@ export async function openAiVoiceWebhook(req: Request, res: Response) {
       callId,
       jurisdictionId: jurisdiction.id,
       jurisdictionSource: jurisdiction.source,
+      jurisdictionName: jurisdiction.name,
     })
 
     return res.sendStatus(200)

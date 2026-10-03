@@ -1,6 +1,7 @@
 import WebSocket from "ws"
 import { createLogger } from "../../lib/logger"
 import { config } from "../../config"
+import { buildVoiceGreetingInstructions } from "../../config/prompts"
 import {
   SEARCH_WEBSITE_DOCUMENTS_NAME,
   executeSearchWebsiteDocuments,
@@ -17,6 +18,7 @@ type SidebandContext = {
   callId: string
   jurisdictionId: string
   jurisdictionSource: string
+  jurisdictionName: string
 }
 
 const activeSidebands = new Set<string>()
@@ -111,8 +113,7 @@ export function attachRealtimeSideband(ctx: SidebandContext): void {
     sendJson(ws, {
       type: "response.create",
       response: {
-        instructions:
-          "Greet the caller briefly. Say you are the AI assistant for their city or county and ask how you can help.",
+        instructions: buildVoiceGreetingInstructions(ctx.jurisdictionName),
       },
     })
   })

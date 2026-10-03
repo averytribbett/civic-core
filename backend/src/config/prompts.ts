@@ -88,3 +88,8 @@ export function buildVoicePrompt(
 ): string {
   return buildPrompt(promptTemplate, "voice", options)
 }
+
+/** First-turn spoken greeting for an inbound Realtime call. */
+export function buildVoiceGreetingInstructions(jurisdictionName: string): string {
+  return `Greet the caller briefly. Say you are the AI assistant for ${jurisdictionName} and ask how you can help.`
+}

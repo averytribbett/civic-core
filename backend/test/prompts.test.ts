@@ -3,6 +3,7 @@ import test from "node:test"
 import {
   buildChatPrompt,
   buildPrompt,
+  buildVoiceGreetingInstructions,
   buildVoicePrompt,
   formatPromptDate,
 } from "../src/config/prompts"
@@ -56,4 +57,10 @@ test("buildVoicePrompt shares date chunk with chat but uses voice rules", () => 
 test("buildPrompt accepts channel explicitly", () => {
   const prompt = buildPrompt("Base.", "voice")
   assert.match(prompt, /Voice call rules/)
+})
+
+test("buildVoiceGreetingInstructions names the jurisdiction", () => {
+  const instructions = buildVoiceGreetingInstructions("Chisago County")
+  assert.match(instructions, /Chisago County/)
+  assert.doesNotMatch(instructions, /their city or county/i)
 })
