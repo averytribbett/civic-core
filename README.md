@@ -1,13 +1,39 @@
 # Civic Core
 
-Customer service agents for municipalities.
+A personal project: an AI assistant for city and county websites. It crawls a municipality’s public pages and PDFs, then answers resident questions in a chat widget that can live on that site.
+
+## Demo
+
+<video src="docs/AI_Assistant_Demo.mp4" width="720" controls playsinline></video>
+
+[Open the demo video](docs/AI_Assistant_Demo.mp4)
+
+## Features
+
+**Answers that cite the city’s own site.** Questions are answered from the pages and PDFs crawled for that jurisdiction. Each reply includes the sources it used, so a resident can open the original page.
+
+**Deep links into long PDFs.** A citation from a PDF opens that file on the page the passage came from (`#page=`), so a long agenda or packet does not have to be scrolled from the start.
+
+**A widget that looks like the city.** Logo, display name, and brand color come from the jurisdiction record. One script tag adds the chat launcher to a page.
+
+**A knowledge base that can be refreshed.** A crawl indexes public HTML and PDFs. A scheduled job re-crawls enabled cities so later answers follow what is published now.
+
+**One setup per city or county.** Each jurisdiction has its own slug, system prompt, optional FAQ page, and branding. Chat, crawl, and the widget all use that slug.
+
+**Cached FAQs.** Questions pulled from a city’s FAQ page are stored with short English answers and reused. The widget keeps a local copy for that city, so suggestions can appear while someone is typing without fetching the list again on every keystroke.
+
+**Language follows the device.** On load, the widget reads the browser language and applies matching UI copy: English, Spanish, French, German, Chinese, Japanese, Portuguese, Arabic, or Korean. Arabic also switches the chat to right-to-left. A language control is still there if someone wants a different one. The layout is built for a phone as well as a desktop.
+
+**A simple signal on answer quality.** Residents can upvote or downvote a reply.
+
+**The same index on a phone call.** An optional voice path answers inbound calls from the same crawled content. It stays off until voice is enabled on the API.
 
 ## Repo layout
 
 | Directory | Role |
 |-----------|------|
-| [`backend/`](backend/) | Express + Prisma API, crawl sync, chat |
-| [`widget/`](widget/) | Embeddable chat widget + local [`demo.html`](widget/demo.html) |
+| [`backend/`](backend/) | Express + Prisma API, crawl, chat, and voice |
+| [`widget/`](widget/) | Embeddable chat widget and a local [`demo.html`](widget/demo.html) |
 | [`frontend/`](frontend/) | Marketing site |
 
 For backend deploy, crawl jobs, and env details see [`backend/README.md`](backend/README.md). For widget embed and hosting see [`widget/README.md`](widget/README.md).
