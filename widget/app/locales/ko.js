@@ -7,7 +7,6 @@
   placeholder: "질문을 입력하세요...",
   send: "보내기",
   disclaimer: "AI는 실수할 수 있습니다. 중요한 정보는 확인하세요.",
-  terms: "이용약관",
   upvote: "추천",
   downvote: "비추천",
   errorMessage: "죄송합니다. 오류가 발생했습니다. 다시 시도해 주세요.",

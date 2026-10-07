@@ -7,7 +7,6 @@
   placeholder: "Stellen Sie eine Frage...",
   send: "Senden",
   disclaimer: "KI kann Fehler machen. Überprüfen Sie wichtige Informationen.",
-  terms: "Nutzungsbedingungen",
   upvote: "Positiv bewerten",
   downvote: "Negativ bewerten",
   errorMessage: "Entschuldigung, etwas ist schiefgelaufen. Bitte versuchen Sie es erneut.",

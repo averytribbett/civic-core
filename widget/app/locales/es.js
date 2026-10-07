@@ -7,7 +7,6 @@
   placeholder: "Escribe una pregunta...",
   send: "Enviar",
   disclaimer: "La IA puede cometer errores. Verifica la información importante.",
-  terms: "Términos",
   upvote: "Voto positivo",
   downvote: "Voto negativo",
   errorMessage: "Lo sentimos, algo salió mal. Por favor, inténtalo de nuevo.",

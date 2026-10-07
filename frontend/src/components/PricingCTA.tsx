@@ -11,11 +11,7 @@ export function PricingCTA() {
         <p className="cta-block__text">
           See how Civic Core answers questions about permits, meetings, and
           services — trained on a live county site. Custom pricing for your
-          municipality?{' '}
-          <a href="mailto:hello@civiccore.ai?subject=Pricing%20inquiry">
-            Get in touch
-          </a>
-          .
+          municipality? Get in touch.
         </p>
         <TryItButton large />
       </div>

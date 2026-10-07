@@ -7,7 +7,7 @@ Use a **dedicated Firebase project** for the widget (separate from the marketing
 1. [Firebase CLI](https://firebase.google.com/docs/cli): `firebase login`
 2. Create a Firebase project (or pick an existing one used only for the widget).
 3. From `widget/`: `cp .firebaserc.example .firebaserc` and set `YOUR_FIREBASE_PROJECT_ID` to that project’s id.
-4. **Custom domain** (optional, e.g. `app.civiccore.ai`): Firebase Console → **Build → Hosting** → connect domain; add the DNS records your registrar shows.
+4. **Custom domain** (optional): Firebase Console → **Build → Hosting** → connect domain; add the DNS records your registrar shows.
 5. Deploy: `yarn deploy:hosting` (runs `prepare-hosting`, `verify:hosting`, then `firebase deploy --only hosting`).
 
 After deploy, the shell is at:
@@ -97,10 +97,6 @@ If launcher and shell are on **split** domains, set `widgetUrl` to the **app** h
 Set **`WIDGET_ALLOWED_ORIGINS`** on the API (comma-separated origins where `widget.html` is served). That is the iframe **`Origin`** for `fetch`, not the parent marketing site. See [`backend/cloud-run.env.yaml.example`](../backend/cloud-run.env.yaml.example).
 
 Express uses permissive **`cors()`**; **`WIDGET_ALLOWED_ORIGINS`** enforces the allowlist for `POST /chat`, vote routes, and **`GET /widget/branding`**.
-
-### Terms link
-
-[`app/widget.html`](app/widget.html) links to `/terms` on the widget host. Host a terms page there or change the link to a full URL.
 
 ---
 

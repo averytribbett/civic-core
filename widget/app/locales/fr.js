@@ -7,7 +7,6 @@
   placeholder: "Posez une question...",
   send: "Envoyer",
   disclaimer: "L'IA peut faire des erreurs. Vérifiez les informations importantes.",
-  terms: "Conditions",
   upvote: "Vote positif",
   downvote: "Vote négatif",
   errorMessage: "Désolé, une erreur s'est produite. Veuillez réessayer.",

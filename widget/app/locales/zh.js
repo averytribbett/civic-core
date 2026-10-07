@@ -7,7 +7,6 @@
   placeholder: "输入问题...",
   send: "发送",
   disclaimer: "AI 可能会出错，请核实重要信息。",
-  terms: "条款",
   upvote: "赞",
   downvote: "踩",
   errorMessage: "抱歉，出了点问题。请重试。",

@@ -12,11 +12,6 @@ const required = [
   "app/widget.js",
   "app/i18n.js",
   "app/locales/en.js",
-  "app/legal.html",
-  "app/legal.css",
-  "app/privacy.html",
-  "app/terms.html",
-  "app/subprocessors.html",
 ]
 
 let ok = true

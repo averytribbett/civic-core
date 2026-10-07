@@ -7,7 +7,6 @@
   placeholder: "Type a question...",
   send: "Send",
   disclaimer: "AI can make mistakes. Verify important info.",
-  terms: "Terms",
   upvote: "Upvote",
   downvote: "Downvote",
   errorMessage: "Sorry, something went wrong. Please try again.",

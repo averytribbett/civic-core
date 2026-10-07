@@ -38,7 +38,7 @@ export function Header() {
 
       <div className="site-header__actions">
         <TryItButton className="site-header__try" />
-        <a href="mailto:hello@civiccore.ai" className="site-header__contact">
+        <a href="/#contact" className="site-header__contact">
           Contact
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
             <path

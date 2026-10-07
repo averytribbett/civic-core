@@ -5,10 +5,7 @@ import { HowItWorks } from './components/HowItWorks'
 import { Features } from './components/Features'
 import { PricingCTA } from './components/PricingCTA'
 import { Footer } from './components/Footer'
-import { LegalPage } from './components/LegalPage'
 import { VoicePage } from './components/VoicePage'
-import { websitePrivacy } from './content/legal/websitePrivacy'
-import { websiteTerms } from './content/legal/websiteTerms'
 import { scrollToSection } from './lib/scrollToSection'
 import './App.css'
 
@@ -54,12 +51,6 @@ function MarketingHome() {
 function App() {
   const path = window.location.pathname.replace(/\/$/, '') || '/'
 
-  if (path === '/privacy') {
-    return <LegalPage document={websitePrivacy} />
-  }
-  if (path === '/terms') {
-    return <LegalPage document={websiteTerms} />
-  }
   if (path === '/voice') {
     return <VoicePage />
   }

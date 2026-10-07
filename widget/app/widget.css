@@ -881,16 +881,6 @@ body {
   color: #64748b;
 }
 
-.input-disclaimer a {
-  color: var(--chat-primary);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.input-disclaimer a:hover {
-  color: var(--chat-primary-hover);
-}
-
 /*
  * Mobile styles are gated by html.is-mobile (set by the embed script from
  * the host page width), not @media — the iframe is ~520px wide on desktop

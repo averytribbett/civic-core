@@ -7,7 +7,6 @@
   placeholder: "質問を入力...",
   send: "送信",
   disclaimer: "AIは間違えることがあります。重要な情報はご確認ください。",
-  terms: "利用規約",
   upvote: "高評価",
   downvote: "低評価",
   errorMessage: "申し訳ありません。エラーが発生しました。もう一度お試しください。",

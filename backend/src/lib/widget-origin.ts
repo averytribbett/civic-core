@@ -14,7 +14,7 @@ export function canonicalOriginFromUrlString(urlOrOrigin: string): string | null
 
 /**
  * Origins allowed to call widget routes. Set `WIDGET_ALLOWED_ORIGINS`
- * to a comma-separated list, e.g. `https://civic-core-widget.web.app,https://app.civiccore.ai`
+ * to a comma-separated list, e.g. `https://civic-core-widget.web.app`
  */
 export function getWidgetAllowedOrigins(): readonly string[] {
   return config.widget.allowedOrigins

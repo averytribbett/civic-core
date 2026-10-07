@@ -40,9 +40,7 @@ const STEPS = [
 ];
 
 export function VoicePage() {
-  const demoHref =
-    DEMO_BOOKING_URL ||
-    'mailto:hello@civiccore.ai?subject=Civic%20Core%20Voice%20demo';
+  const demoHref = DEMO_BOOKING_URL || '/#contact';
   const demoExternal = Boolean(DEMO_BOOKING_URL);
 
   return (
@@ -73,7 +71,7 @@ export function VoicePage() {
                 Book a demo
               </a>
               <a
-                href="mailto:hello@civiccore.ai?subject=Civic%20Core%20Voice%20waitlist"
+                href="/#contact"
                 className="voice-hero__secondary mono-label"
               >
                 Join the waitlist ↗
@@ -141,10 +139,7 @@ export function VoicePage() {
             </h2>
             <p className="cta-block__text">
               Civic Core Voice is in development. Book a demo to see the chat
-              product today and get on the list for phone-line pilots.{' '}
-              <a href="mailto:hello@civiccore.ai?subject=Civic%20Core%20Voice%20waitlist">
-                hello@civiccore.ai
-              </a>
+              product today and get on the list for phone-line pilots.
             </p>
             <a
               href={demoHref}

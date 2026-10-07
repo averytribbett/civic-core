@@ -315,7 +315,7 @@
 
   // Chat iframe: absolute https base (e.g. https://PROJECT.web.app/) → /app/widget.html on that host
   function resolveChatShellUrl(raw) {
-    const fallback = "https://app.civiccore.ai/app/widget.html";
+    const fallback = "https://civic-core-widget.web.app/app/widget.html";
     if (!raw || !String(raw).trim()) return fallback;
     const u = String(raw).trim();
     if (!/^https?:\/\//i.test(u)) return u;
@@ -333,7 +333,7 @@
   const shellFromLauncher =
     launcherOrigin && new URL("app/widget.html", launcherOrigin + "/").toString();
   const shellRaw = (config.widgetUrl && String(config.widgetUrl).trim()) || shellFromLauncher || "";
-  iframe.src = shellRaw ? resolveChatShellUrl(shellRaw) : "https://app.civiccore.ai/app/widget.html";
+  iframe.src = shellRaw ? resolveChatShellUrl(shellRaw) : "https://civic-core-widget.web.app/app/widget.html";
   iframe.setAttribute("title", loc.chatWidget || loc.openChat);
 
   const iframeTransition = prefersReducedMotion
