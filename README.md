@@ -4,9 +4,7 @@ A personal project: an AI assistant for city and county websites. It crawls a mu
 
 ## Demo
 
-<video src="docs/AI_Assistant_Demo.mp4" width="720" controls playsinline></video>
-
-[Open the demo video](docs/AI_Assistant_Demo.mp4)
+<video src="https://github.com/averytribbett/civic-core/raw/main/docs/AI_Assistant_Demo.mp4" width="720" controls playsinline></video>
 
 ## Features
 
